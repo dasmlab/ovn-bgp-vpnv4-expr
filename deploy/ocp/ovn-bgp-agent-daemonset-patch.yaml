@@ -8,15 +8,22 @@ spec:
     spec:
       containers:
         - name: ovn-bgp-agent
-          image: quay.io/example/ovn-bgp-agent:vpnv4
+          # Use the upstream agent image with VPNv4 driver
+          image: ghcr.io/dasmlab/ovn-bgp-agent:vpnv4-upstream
+          # The upstream agent uses oslo.config
+          # Pass config file via --config-file or use environment variables
+          args:
+            - --config-file=/etc/ovn-bgp-agent/ovn-bgp-agent.conf
           env:
-            - name: OVN_BGP_DRIVER
-              value: vpnv4
-            - name: OVN_BGP_CONFIG
-              value: /etc/ovn-bgp-agent/vpnv4.yaml
+            # Optional: override driver via environment
+            # - name: OS_DRIVER
+            #   value: vpnv4_driver
           volumeMounts:
             - name: ovn-bgp-agent-config
               mountPath: /etc/ovn-bgp-agent
+          # Required for OVSDB access
+          securityContext:
+            privileged: true
       volumes:
         - name: ovn-bgp-agent-config
           configMap:

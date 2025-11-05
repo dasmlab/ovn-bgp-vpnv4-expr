@@ -25,12 +25,23 @@ vpnv4-apply: vpnv4-config
 	@python3 "$(REPO_ROOT)/scripts/vpnv4/setup_vrfs.py" --tenants "$(REPO_ROOT)/deploy/vpnv4/tenants.json" --container frr-vpnv4
 
 agent-image:
-	@echo "[make agent-image] Building vpnv4 agent image ($(AGENT_IMAGE))"
+	@echo "[make agent-image] Building standalone vpnv4 agent image ($(AGENT_IMAGE))"
 	@docker build -f "$(REPO_ROOT)/images/agent/Dockerfile" -t "$(AGENT_IMAGE)" "$(REPO_ROOT)"
 
 agent-push:
-	@echo "[make agent-push] Pushing vpnv4 agent image ($(AGENT_IMAGE))"
+	@echo "[make agent-push] Pushing standalone vpnv4 agent image ($(AGENT_IMAGE))"
 	@docker push "$(AGENT_IMAGE)"
+
+# Upstream agent integration image
+UPSTREAM_AGENT_IMAGE ?= ghcr.io/dasmlab/ovn-bgp-agent:vpnv4-upstream
+
+upstream-agent-image:
+	@echo "[make upstream-agent-image] Building upstream ovn-bgp-agent with VPNv4 driver ($(UPSTREAM_AGENT_IMAGE))"
+	@docker build -f "$(REPO_ROOT)/images/upstream-agent/Dockerfile" -t "$(UPSTREAM_AGENT_IMAGE)" "$(REPO_ROOT)"
+
+upstream-agent-push:
+	@echo "[make upstream-agent-push] Pushing upstream agent image ($(UPSTREAM_AGENT_IMAGE))"
+	@docker push "$(UPSTREAM_AGENT_IMAGE)"
 
 test:
 	@echo "[make test] Running unit/integration tests (placeholder)."
