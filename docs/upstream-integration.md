@@ -10,11 +10,13 @@ We have **two separate implementations**:
    - Polls OVN NB DB directly
    - Ready for production use
 
-2. **Upstream `ovn-bgp-agent` integration** 🚧 - **Not yet implemented**
-   - Requires implementing `AgentDriverBase` interface
-   - Uses IP-oriented API (`expose_ip()`/`withdraw_ip()`)
-   - Loads drivers via stevedore entry points
-   - Used on production clusters
+2. **Upstream `ovn-bgp-agent` integration** ✅ - **Implemented and ready for testing**
+   - Implemented `AgentDriverBase` interface in `VPNv4UpstreamDriver`
+   - Adapts IP-oriented API (`expose_ip(ips, row)`/`withdraw_ip(ips, row)`) to namespace-oriented VPNv4 driver
+   - Registered as stevedore entry point (`vpnv4_driver`)
+   - Extracts namespace from `row.external_ids` or queries OVN NB DB
+   - Registered oslo.config options for VPNv4 settings
+   - **Ready for testing with upstream agent service**
 
 ## The Integration Challenge
 
@@ -99,43 +101,50 @@ Continue using the standalone `vpnv4-agent` for now:
 
 ## Implementation Steps for Upstream Integration
 
-### Step 1: Register Entry Point
+### Step 1: Register Entry Point ✅
 
-Add to `pyproject.toml`:
+Added to `pyproject.toml`:
 
 ```toml
 [project.entry-points."ovn_bgp_agent.drivers"]
 vpnv4_driver = "ovn_bgp_agent.drivers.upstream_vpnv4_driver:VPNv4UpstreamDriver"
 ```
 
-### Step 2: Implement AgentDriverBase Interface
+### Step 2: Implement AgentDriverBase Interface ✅
 
-Create `src/ovn_bgp_agent/drivers/upstream_vpnv4_driver.py`:
-- Inherit from `AgentDriverBase`
-- Implement all abstract methods
-- Wrap `VPNv4RouteDriver` internally
-- Extract namespace from IP context (may need upstream help)
+Created `src/ovn_bgp_agent/drivers/upstream_vpnv4_driver.py`:
+- Inherits from `AgentDriverBase`
+- Implements all abstract methods:
+  - `expose_ip(ips, row, associated_port=None)` - extracts namespace, aggregates IPs
+  - `withdraw_ip(ips, row, associated_port=None)` - removes IPs from namespace tracking
+  - `expose_remote_ip()` / `withdraw_remote_ip()` - no-ops (not applicable)
+  - `expose_subnet()` / `withdraw_subnet()` - no-ops (works at IP level)
+  - `start()` - initializes OVN NB IDL for namespace lookups
+  - `sync()` / `frr_sync()` - reconciliation methods
+- Wraps `VPNv4RouteDriver` internally
+- Extracts namespace from `row.external_ids` or queries OVN NB DB
 
-### Step 3: Add Configuration Options
+### Step 3: Add Configuration Options ✅
 
-Extend upstream agent's config to support VPNv4:
-- `vpnv4_local_asn`
-- `vpnv4_rd_base`
-- `vpnv4_rt_base`
-- `vpnv4_peers` (list of FortiGate peers)
+Created `src/ovn_bgp_agent/config_extensions.py`:
+- Registers VPNv4 options with oslo.config:
+  - `vpnv4_output_dir` - FRR config output directory
+  - `vpnv4_rd_base` - Route Distinguisher base ASN
+  - `vpnv4_rt_base` - Route Target base ASN
+  - `vpnv4_router_id` - Router ID for VPNv4 sessions
+  - `vpnv4_peers` - List of BGP peers (format: "address:remote_asn:description")
 
-### Step 4: Handle Namespace Extraction
+### Step 4: Handle Namespace Extraction ✅
 
-The challenge: How does `expose_ip(ip)` know which namespace?
+**Solution implemented:**
+1. Check `row.external_ids` for namespace keys (`k8s.ovn.org/namespace`, etc.)
+2. If not found, query OVN NB DB `Logical_Switch_Port` by `logical_port` name
+3. Extract namespace from LSP `external_ids`
+4. Fallback: Track IPs in memory and use for withdrawal if namespace not found
 
-**Possible solutions:**
-1. Query OVN NB DB to find namespace for IP
-2. Extend upstream agent to pass namespace context
-3. Use OVN SB IDL events that include namespace info
-4. Maintain a mapping of IP -> namespace
+### Step 5: Testing 🚧
 
-### Step 5: Testing
-
+**Remaining:**
 - Test with upstream agent's event system
 - Verify FRR config generation
 - Test route advertisement/withdrawal
