@@ -102,3 +102,13 @@ class TenantContext:
             if prefix in self.advertised_prefixes:
                 self.advertised_prefixes.remove(prefix)
 
+    def set_prefixes(self, prefixes: Iterable[str]) -> None:
+        """Replace the advertised prefixes with ``prefixes``.
+
+        Duplicates are removed while preserving order so that downstream
+        consumers (FRR renderer, tests) receive deterministic output.
+        """
+
+        unique = list(dict.fromkeys(prefixes))
+        self.advertised_prefixes = unique
+

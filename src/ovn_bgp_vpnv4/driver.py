@@ -54,6 +54,21 @@ class VPNv4RouteDriver:
     # ------------------------------------------------------------------
     # VRF lifecycle helpers
     # ------------------------------------------------------------------
+    def _sanitize_vrf_name(self, namespace: str, rd: str) -> str:
+        """Generate a Linux-safe VRF device name from namespace and RD.
+        
+        Linux VRF device names must:
+        - Be <= 15 characters
+        - Not contain hyphens
+        - Be valid interface names
+        
+        We use the RD ID (e.g., 34816 from 65000:34816) to create a deterministic
+        name like 'vrf34816' which is safe and predictable.
+        """
+        # Extract the ID from RD format: "65000:34816" -> "34816"
+        rd_id = rd.split(":", 1)[1] if ":" in rd else rd
+        return f"vrf{rd_id}"
+
     def ensure_namespace(self, namespace: str) -> TenantContext:
         """Ensure ``namespace`` has a VRF allocation and return its context."""
 
@@ -61,8 +76,9 @@ class VPNv4RouteDriver:
             return self._state.tenants[namespace]
 
         allocation = self._allocator.allocate(namespace)
+        vrf_name = self._sanitize_vrf_name(namespace, allocation.rd)
         vrf = VRFDefinition(
-            name=namespace,
+            name=vrf_name,
             rd=allocation.rd,
             import_rts=[allocation.import_rt],
             export_rts=[allocation.export_rt],
@@ -71,8 +87,9 @@ class VPNv4RouteDriver:
         tenant = TenantContext(namespace=namespace, vrf=vrf)
         self._state.tenants[namespace] = tenant
         LOG.info(
-            "Allocated vpnv4 VRF for namespace '%s': rd=%s rt=%s",
+            "Allocated vpnv4 VRF for namespace '%s': vrf=%s rd=%s rt=%s",
             namespace,
+            vrf_name,
             allocation.rd,
             allocation.import_rt,
         )
@@ -105,6 +122,28 @@ class VPNv4RouteDriver:
 
         tenant.withdraw_prefixes(prefixes)
         LOG.debug("Namespace %s withdrew prefixes: %s", namespace, prefixes)
+        self.render()
+        return tenant
+
+    def synchronize_prefixes(
+        self, namespace: str, prefixes: Iterable[str]
+    ) -> TenantContext:
+        """Apply ``prefixes`` as the desired state for ``namespace``.
+
+        This helper is designed for higher-level controllers (e.g. the
+        upstream ovn-bgp-agent watcher) which reconcile the full list of
+        prefixes each time they observe a change.  It avoids redundant render
+        cycles when the computed prefix set does not change.
+        """
+
+        tenant = self.ensure_namespace(namespace)
+        desired = list(dict.fromkeys(prefixes))
+        if tenant.advertised_prefixes == desired:
+            LOG.debug("Namespace %s already advertising desired prefixes", namespace)
+            return tenant
+
+        tenant.set_prefixes(desired)
+        LOG.debug("Namespace %s synchronized prefixes: %s", namespace, desired)
         self.render()
         return tenant
 

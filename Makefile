@@ -1,6 +1,7 @@
 .PHONY: deps lab-up lab-down vpnv4-config vpnv4-apply test observe fmt clean
 
 REPO_ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
+AGENT_IMAGE ?= ghcr.io/dasmlab/ovn-bgp-agent:vpnv4-dev
 
 deps:
 	@echo "[make deps] Installing lab dependencies (placeholder)."
@@ -22,6 +23,14 @@ vpnv4-apply: vpnv4-config
 	@echo "[make vpnv4-apply] Reloading FRR configuration"
 	@docker exec frr-vpnv4 vtysh -f /etc/frr/frr.merged.conf
 	@python3 "$(REPO_ROOT)/scripts/vpnv4/setup_vrfs.py" --tenants "$(REPO_ROOT)/deploy/vpnv4/tenants.json" --container frr-vpnv4
+
+agent-image:
+	@echo "[make agent-image] Building vpnv4 agent image ($(AGENT_IMAGE))"
+	@docker build -f "$(REPO_ROOT)/images/agent/Dockerfile" -t "$(AGENT_IMAGE)" "$(REPO_ROOT)"
+
+agent-push:
+	@echo "[make agent-push] Pushing vpnv4 agent image ($(AGENT_IMAGE))"
+	@docker push "$(AGENT_IMAGE)"
 
 test:
 	@echo "[make test] Running unit/integration tests (placeholder)."

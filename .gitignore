@@ -1,1 +1,7 @@
 externals/ovn-kubernetes
+externals/ovn-bgp-agent
+__pycache__/
+*.pyc
+.venv/
+src/ovn_bgp_vpnv4.egg-info/
+.venv/

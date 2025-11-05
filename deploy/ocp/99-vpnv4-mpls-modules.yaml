@@ -1,0 +1,33 @@
+apiVersion: machineconfiguration.openshift.io/v1
+kind: MachineConfig
+metadata:
+  name: 99-vpnv4-mpls-modules
+  labels:
+    machineconfiguration.openshift.io/role: worker
+spec:
+  config:
+    ignition:
+      version: 3.2.0
+    storage:
+      files:
+        - path: /etc/modprobe.d/vpnv4.conf
+          mode: 0644
+          contents:
+            source: data:text/plain;base64,bXBsc19yb3V0ZXIAbXBsc19pcHR1bm5lbAo=
+    systemd:
+      units:
+        - name: vpnv4-mpls.service
+          enabled: true
+          contents: |
+            [Unit]
+            Description=Load MPLS modules for vpnv4 driver
+            After=network.target
+
+            [Service]
+            Type=oneshot
+            ExecStart=/usr/sbin/modprobe mpls_router
+            ExecStart=/usr/sbin/modprobe mpls_iptunnel
+
+            [Install]
+            WantedBy=multi-user.target
+

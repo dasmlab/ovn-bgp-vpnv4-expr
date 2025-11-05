@@ -1,0 +1,89 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ovn-bgp-vpnv4
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vpnv4-agent-config
+  namespace: ovn-bgp-vpnv4
+data:
+  vpnv4.yaml: |
+    driver:
+      local_asn: 65000
+      router_id: 10.255.0.2
+      rd_base: 65000
+      rt_base: 65000
+      output_dir: /etc/frr
+      include_globals: true
+      maintain_empty_vrf: true
+      neighbours:
+        - address: 192.168.1.100  # FortiGate peer IP
+          remote_asn: 65100
+          families: [vpnv4]
+          description: FortiGate-primary
+    watchers:
+      - type: ovn
+        options:
+          connection: tcp:127.0.0.1:6641
+          interval: 5
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: vpnv4-agent
+  namespace: ovn-bgp-vpnv4
+  labels:
+    app: vpnv4-agent
+spec:
+  selector:
+    matchLabels:
+      app: vpnv4-agent
+  template:
+    metadata:
+      labels:
+        app: vpnv4-agent
+    spec:
+      hostNetwork: true
+      serviceAccountName: vpnv4-agent
+      containers:
+      - name: vpnv4-agent
+        image: ghcr.io/dasmlab/ovn-bgp-agent:vpnv4-dev
+        imagePullPolicy: Always
+        command: ["python", "-m", "vpnv4_agent.main"]
+        args:
+          - "--config"
+          - "/etc/vpnv4-agent/vpnv4.yaml"
+          - "--verbose"
+        env:
+        - name: PYTHONPATH
+          value: /app/src
+        volumeMounts:
+        - name: config
+          mountPath: /etc/vpnv4-agent
+          readOnly: true
+        - name: frr-config
+          mountPath: /etc/frr
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      volumes:
+      - name: config
+        configMap:
+          name: vpnv4-agent-config
+      - name: frr-config
+        hostPath:
+          path: /etc/frr
+          type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vpnv4-agent
+  namespace: ovn-bgp-vpnv4
+

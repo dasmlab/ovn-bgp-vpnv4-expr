@@ -1,0 +1,18 @@
+driver:
+  local_asn: 65000
+  router_id: 10.255.0.2
+  rd_base: 65000
+  rt_base: 65000
+  output_dir: deploy/frr
+  include_globals: false
+  maintain_empty_vrf: true
+  neighbours:
+    - address: 172.31.100.11
+      remote_asn: 65100
+watchers:
+  - type: ovn
+    path: .
+    options:
+      connection: tcp:127.0.0.1:6641
+      interval: 5
+

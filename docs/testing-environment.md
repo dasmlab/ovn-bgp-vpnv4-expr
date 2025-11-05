@@ -43,11 +43,17 @@ Contributors copy this file to `scripts/lab/.env` and adjust values for their se
    - Launches FRR + FortiGate simulator via Compose.
    - Applies generated FRR configs from `deploy/frr/`.
    - Loads required kernel modules via `modprobe mpls_router mpls_iptunnel` (if not already present).
-3. `make test`
+   - Runs `scripts/lab/validate_vpnv4.py` to assert vpnv4 sessions and VRF routes.
+3. `make agent-image`
+   - Builds the `vpnv4-agent` container (defaults to `ghcr.io/dasmlab/ovn-bgp-agent:vpnv4-dev`).
+   - Push with `make agent-push` when ready to stage on OCP/k3s.
+4. `make test`
    - Runs unit tests (pytest/go) and integration suite hitting simulator API.
-4. `make observe`
+5. Configure `deploy/vpnv4/vpnv4-agent.yaml`
+   - Default watcher polls `tenants.json`; add an OVN watcher entry with `type: ovn` and an `options.connection` pointing at your NB DB to source prefixes directly from OVN.
+5. `make observe`
    - Captures BGP tables, Prometheus metrics, and pcaps into `artifacts/`.
-5. `make lab-down`
+6. `make lab-down`
    - Destroys containers and kind cluster, cleans temps.
 
 ## 5. CI Considerations

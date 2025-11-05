@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: ovn-bgp-agent
+  namespace: openshift-ovn-kubernetes
+spec:
+  template:
+    spec:
+      containers:
+        - name: ovn-bgp-agent
+          image: quay.io/example/ovn-bgp-agent:vpnv4
+          env:
+            - name: OVN_BGP_DRIVER
+              value: vpnv4
+            - name: OVN_BGP_CONFIG
+              value: /etc/ovn-bgp-agent/vpnv4.yaml
+          volumeMounts:
+            - name: ovn-bgp-agent-config
+              mountPath: /etc/ovn-bgp-agent
+      volumes:
+        - name: ovn-bgp-agent-config
+          configMap:
+            name: ovn-bgp-agent-config
+

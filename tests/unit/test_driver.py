@@ -50,3 +50,18 @@ def test_driver_withdraws_prefix(tmp_path: Path):
     assert rendered is not None
     assert "! no prefixes advertised yet" in rendered
 
+
+def test_driver_synchronize_prefixes(tmp_path: Path):
+    driver = build_driver(tmp_path)
+
+    driver.synchronize_prefixes("tenant-a", ["10.244.0.0/24", "10.244.0.0/24"])
+
+    first_render = driver.get_rendered_config()
+    assert first_render is not None
+    assert first_render.count("network 10.244.0.0/24") == 1
+
+    driver.synchronize_prefixes("tenant-a", ["10.244.0.0/24"])
+
+    second_render = driver.get_rendered_config()
+    assert second_render == first_render
+

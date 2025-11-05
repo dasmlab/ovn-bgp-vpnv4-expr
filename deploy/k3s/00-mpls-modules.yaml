@@ -1,0 +1,23 @@
+# Systemd unit to load MPLS modules on boot for k3s nodes
+# Apply this to each node or use a systemd drop-in
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mpls-modules-service
+  namespace: kube-system
+data:
+  mpls-modules.service: |
+    [Unit]
+    Description=Load MPLS modules for VPNv4 driver
+    After=network.target
+    Before=k3s.service
+
+    [Service]
+    Type=oneshot
+    ExecStart=/usr/sbin/modprobe mpls_router
+    ExecStart=/usr/sbin/modprobe mpls_iptunnel
+    RemainAfterExit=yes
+
+    [Install]
+    WantedBy=multi-user.target
+

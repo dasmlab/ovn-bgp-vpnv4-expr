@@ -58,4 +58,20 @@ services:
       timeout: 10s
       retries: 5
 
+  vpnv4-agent:
+    image: ${AGENT_IMAGE:-ghcr.io/dasmlab/ovn-bgp-agent:vpnv4-dev}
+    container_name: vpnv4-agent
+    depends_on:
+      - frr
+    networks:
+      kind:
+      bgp-mgmt:
+    environment:
+      - PYTHONPATH=/app/src
+    volumes:
+      - ../vpnv4/vpnv4-agent.yaml:/etc/ovn-bgp-agent/vpnv4.yaml:ro
+      - ../vpnv4/tenants.json:/etc/ovn-bgp-agent/tenants.json:ro
+      - ../frr:/app/deploy/frr
+    command: ["--config", "/etc/ovn-bgp-agent/vpnv4.yaml", "--verbose"]
+
 
