@@ -54,11 +54,11 @@ spec:
 > `worker-rt`). Reboot nodes or wait for the MachineConfig Operator to drain
 > and update them.
 
-## 3. Agent ConfigMap patch
+## 3. Agent configuration ConfigMap
 
-`ovn-bgp-agent` consumes a ConfigMap for runtime settings.  The example below
-adds a `driver: vpnv4` toggle together with RD/RT base values that mirror the
-lab defaults.  Adjust the ASNs/RDs to match your environment.
+`vpnv4-agent` expects a YAML configuration file (default path
+`/etc/ovn-bgp-agent/vpnv4.yaml`).  The sample ConfigMap below matches the
+structure consumed by `vpnv4_agent.config.load_config`.
 
 ```yaml
 apiVersion: v1
@@ -67,21 +67,33 @@ metadata:
   name: ovn-bgp-agent-config
   namespace: openshift-ovn-kubernetes
 data:
-  driver: vpnv4
-  rd_base: "65000"
-  rt_base: "65000"
-  router_id: "<replace-with-loopback>"
-  neighbors: |
-    - address: 192.0.2.11
-      remote_asn: 65101
-    - address: 192.0.2.12
-      remote_asn: 65102
-    - address: 192.0.2.13
-      remote_asn: 65103
+  vpnv4.yaml: |
+    driver:
+      local_asn: 65000
+      router_id: 10.255.0.2
+      rd_base: 65000
+      rt_base: 65000
+      output_dir: /etc/frr
+      include_globals: true
+      maintain_empty_vrf: true
+      neighbours:
+        - address: 192.0.2.11
+          remote_asn: 65101
+        - address: 192.0.2.12
+          remote_asn: 65102
+        - address: 192.0.2.13
+          remote_asn: 65103
+    tenants.json: |
+      {
+        "tenants": [
+          {"namespace": "demo", "prefixes": ["10.244.0.0/24"]}
+        ]
+      }
 ```
 
-Apply the ConfigMap (or merge into the existing one) before restarting the agent
-DaemonSet.
+Mount the ConfigMap as a volume so the binary finds both `vpnv4.yaml` and the
+`tenants.json` file watched by the file-based namespace watcher.  Automating the
+tenants feed (e.g. via a controller) is a follow-up task.
 
 ## 4. DaemonSet patch (driver wiring)
 
@@ -96,7 +108,7 @@ spec:
     spec:
       containers:
         - name: ovn-bgp-agent
-          image: quay.io/<org>/ovn-bgp-agent:vpnv4
+          image: ghcr.io/<org>/ovn-bgp-agent:vpnv4-dev
           env:
             - name: OVN_BGP_DRIVER
               value: vpnv4

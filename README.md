@@ -8,6 +8,7 @@ OVN-BGP → FortiGate VPNv4 Experiment
 - ✅ **FortiGate simulator acceptance:** GoBGP imports both RDs/RTs and exposes them via `gobgp vrf demo{,-b} rib` and the global VPNv4 table.
 - ✅ **Agent integration scaffolded:** `src/ovn_bgp_agent/` hosts a lightweight driver registry and vpnv4 adapter mirroring the upstream `ovn-bgp-agent` contract.
 - ✅ **Automated lab validation:** `scripts/lab/validate_vpnv4.py` runs at the end of `lab-up` to assert FRR/GoBGP session state and VRF routes.
+- ✅ **Standalone agent container:** `vpnv4-agent` binary + `images/agent/Dockerfile` build a GHCR-ready image driven by a YAML config and file watcher.
 - 🚧 **Upstream wiring outstanding:** the experimental driver lives under `src/ovn_bgp_vpnv4/` and is not yet integrated with the upstream `ovn-bgp-agent` event loop.
 - 🚧 **OCP / hardware validation pending:** packaging and FortiGate appliance tests are queued once the driver is upstreamed.
 
@@ -243,6 +244,18 @@ flowchart LR
   ```
 
 - Mention outstanding tasks (upstream integration, FortiGate hardware pairing) when circulating the tag.
+
+### 6.3 Standalone Agent Container
+
+- Build the container locally: `make agent-image [AGENT_IMAGE=ghcr.io/dasmlab/ovn-bgp-agent:vpnv4-dev]`
+- Push to GHCR (requires prior `docker login ghcr.io`): `make agent-push`
+- Run the binary outside of Kubernetes:
+
+  ```bash
+  vpnv4-agent --config deploy/vpnv4/vpnv4-agent.yaml --verbose
+  ```
+
+- The agent expects a tenants file (default `/etc/ovn-bgp-agent/tenants.json`) shaped like `deploy/vpnv4/tenants.json`. Updates to the file are detected and converted into namespace events.
 
 ## 7. FortiGate Simulator Plan
 

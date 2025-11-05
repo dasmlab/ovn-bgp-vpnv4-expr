@@ -13,6 +13,12 @@ classifiers = [
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: POSIX :: Linux",
 ]
+dependencies = [
+    "PyYAML>=6.0",
+]
+
+[project.scripts]
+vpnv4-agent = "vpnv4_agent.main:main"
 
 [project.optional-dependencies]
 dev = [

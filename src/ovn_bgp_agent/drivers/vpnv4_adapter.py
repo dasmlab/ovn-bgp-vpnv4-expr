@@ -36,9 +36,13 @@ class VPNv4DriverAdapter(NamespaceDriver):
         self._driver.withdraw_namespace(namespace)
 
 
-def build_vpnv4_adapter(driver: VPNv4RouteDriver) -> VPNv4DriverAdapter:
+def build_vpnv4_adapter(
+    driver: VPNv4RouteDriver,
+    *,
+    maintain_empty_vrf: bool = True,
+) -> VPNv4DriverAdapter:
     """Helper mirroring the builder pattern used by the upstream agent."""
 
-    return VPNv4DriverAdapter(driver)
+    return VPNv4DriverAdapter(driver, maintain_empty_vrf=maintain_empty_vrf)
 
 
