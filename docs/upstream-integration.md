@@ -10,12 +10,14 @@ We have **two separate implementations**:
    - Polls OVN NB DB directly
    - Ready for production use
 
-2. **Upstream `ovn-bgp-agent` integration** ✅ - **Implemented and ready for testing**
+2. **Upstream `ovn-bgp-agent` integration** ✅ - **Implemented with bidirectional route handling**
    - Implemented `AgentDriverBase` interface in `VPNv4UpstreamDriver`
    - Adapts IP-oriented API (`expose_ip(ips, row)`/`withdraw_ip(ips, row)`) to namespace-oriented VPNv4 driver
    - Registered as stevedore entry point (`vpnv4_driver`)
    - Extracts namespace from `row.external_ids` or queries OVN NB DB
    - Registered oslo.config options for VPNv4 settings
+   - **Route export:** Advertises namespace prefixes to FortiGate via VPNv4
+   - **Route import:** Monitors kernel VRF tables for BGP routes from FortiGate and syncs them to OVN logical routers
    - **Ready for testing with upstream agent service**
 
 ## The Integration Challenge

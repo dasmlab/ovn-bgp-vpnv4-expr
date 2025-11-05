@@ -170,7 +170,7 @@ flowchart LR
 
 - **Kind-based lab:** deploy ovn-kubernetes + ovn-bgp-agent in VPNv4 mode; connect to simulator.
 - **Failover scenarios:** bounce sessions, rotate RTs, ensure convergence does not regress.
-- **Return path validation:** ensure imported routes install into OVN for pod egress.
+- ✅ **Return path implementation:** Routes imported from FortiGate are monitored in kernel VRF tables and synced to OVN logical routers for pod egress.
 
 ### 5.4 Observability
 
