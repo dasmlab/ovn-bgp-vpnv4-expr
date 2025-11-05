@@ -4,30 +4,33 @@ metadata:
   name: ovn-bgp-agent-config
   namespace: openshift-ovn-kubernetes
 data:
-  # oslo.config file for upstream ovn-bgp-agent
+  # oslo.config INI file for upstream ovn-bgp-agent
   # This configures the agent to use the vpnv4_driver
   ovn-bgp-agent.conf: |
     [DEFAULT]
+    # Select the VPNv4 driver (registered via stevedore entry point)
     driver = vpnv4_driver
     reconcile_interval = 300
     frr_reconcile_interval = 15
     
-    # BGP base settings
+    # BGP base settings (used by VPNv4 driver)
     bgp_AS = 65000
     bgp_router_id = 10.255.0.2
     
-    # VPNv4-specific settings
+    # VPNv4-specific settings (registered in config_extensions.py)
     vpnv4_output_dir = /etc/frr/vpnv4
     vpnv4_rd_base = 65000
     vpnv4_rt_base = 65000
     vpnv4_router_id = 10.255.0.2
+    # Peer format: "address:remote_asn:description,address2:remote_asn2:description2"
     vpnv4_peers = 192.0.2.11:65101:fortigate-1,192.0.2.12:65102:fortigate-2,192.0.2.13:65103:fortigate-3
     
-    # OVSDB connection
+    # OVSDB connection (for OVN integration)
     ovsdb_connection = unix:/var/run/openvswitch/db.sock
     ovsdb_connection_timeout = 180
     
     [ovn]
+    # OVN database connections (if needed)
     ovn_nb_connection = tcp:127.0.0.1:6641
     ovn_sb_connection = tcp:127.0.0.1:6642
 
