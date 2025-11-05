@@ -8,12 +8,17 @@ ovn-bgp-agent service via stevedore entry points.
 from __future__ import annotations
 
 import logging
+import ipaddress
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Dict, Set
+from threading import Lock, Thread, Event
+import time
 
 from ovn_bgp_agent.drivers import driver_api
 from ovn_bgp_agent import config as agent_config
 from ovn_bgp_agent.drivers.openstack.utils import ovn as ovn_utils
+from ovn_bgp_agent.utils import linux_net
+import pyroute2
 
 from ovn_bgp_vpnv4.driver import VPNv4RouteDriver
 from ovn_bgp_vpnv4.config import GlobalConfig, Neighbor, AddressFamily
@@ -38,6 +43,10 @@ NAMESPACE_KEYS = (
     "namespace",
 )
 
+# BGP protocol number (from netlink constants)
+# From /usr/include/linux/rtnetlink.h: RTPROT_BGP = 186
+RTPROT_BGP = 186
+
 
 class VPNv4UpstreamDriver(driver_api.AgentDriverBase):
     """Upstream agent driver that wraps VPNv4RouteDriver.
@@ -46,6 +55,9 @@ class VPNv4UpstreamDriver(driver_api.AgentDriverBase):
     IP-oriented AgentDriverBase interface expected by ovn-bgp-agent.
     It aggregates IPs by namespace and uses the VPNv4RouteDriver to
     manage VRF-level route advertisements.
+    
+    Additionally, it monitors imported routes from FortiGate peers
+    and syncs them to OVN logical routers.
     """
 
     def __init__(self):
@@ -70,8 +82,16 @@ class VPNv4UpstreamDriver(driver_api.AgentDriverBase):
         # Track IPs per namespace for aggregation
         self._namespace_ips: dict[str, set[str]] = {}
         
-        # OVN NB IDL for namespace lookup (initialized in start())
+        # OVN NB IDL for namespace lookup and route sync (initialized in start())
         self._nb_idl: Optional[ovn_utils.OvnNbIdl] = None
+        
+        # Track imported routes per namespace: {namespace: {prefix: next_hop}}
+        self._imported_routes: Dict[str, Dict[str, str]] = {}
+        self._routes_lock = Lock()
+        
+        # Route import watcher thread
+        self._route_watcher_thread: Optional[Thread] = None
+        self._stop_event = Event()
         
         LOG.info("VPNv4UpstreamDriver initialized (output=%s)", self._output_dir)
 
@@ -113,7 +133,7 @@ class VPNv4UpstreamDriver(driver_api.AgentDriverBase):
         """Start the VPNv4 driver and initialize OVN connections."""
         LOG.info("VPNv4UpstreamDriver starting")
         
-        # Initialize OVN NB IDL for namespace lookups
+        # Initialize OVN NB IDL for namespace lookups and route sync
         # Get OVN remote from OVS connection
         ovs_idl = ovn_utils.OvsIdl()
         ovs_idl.start(agent_config.CONF.ovsdb_connection)
@@ -121,7 +141,7 @@ class VPNv4UpstreamDriver(driver_api.AgentDriverBase):
         ovs_idl.stop()
         
         if ovn_remote:
-            # Initialize NB IDL for namespace lookups
+            # Initialize NB IDL for namespace lookups and route installation
             # start() returns the OvsdbNbOvnIdl object
             nb_idl_instance = ovn_utils.OvnNbIdl(ovn_remote)
             self._nb_idl = nb_idl_instance.start()
@@ -129,12 +149,27 @@ class VPNv4UpstreamDriver(driver_api.AgentDriverBase):
         else:
             LOG.warning("VPNv4UpstreamDriver: Could not determine OVN remote")
         
+        # Start route import watcher
+        self._start_route_watcher()
+        
         LOG.info("VPNv4UpstreamDriver started")
+    
+    def stop(self):
+        """Stop the VPNv4 driver and cleanup resources."""
+        LOG.info("VPNv4UpstreamDriver stopping")
+        self._stop_event.set()
+        if self._route_watcher_thread:
+            self._route_watcher_thread.join(timeout=5)
+        if self._nb_idl:
+            self._nb_idl.stop()
+        LOG.info("VPNv4UpstreamDriver stopped")
 
     def sync(self):
         """Reconcile routes to ensure consistency."""
         LOG.debug("VPNv4UpstreamDriver sync called")
         self._driver.sync()
+        # Also sync imported routes
+        self._sync_imported_routes()
 
     def frr_sync(self):
         """Reconcile FRR configuration."""
@@ -243,12 +278,21 @@ class VPNv4UpstreamDriver(driver_api.AgentDriverBase):
         LOG.debug("withdraw_ip: namespace=%s, ips=%s", namespace, ip_list)
 
     def expose_remote_ip(self, ip_address):
-        """Expose a remote IP (imported route) - not applicable for VPNv4 export."""
-        LOG.debug("expose_remote_ip called (not applicable for VPNv4 export): %s", ip_address)
+        """Expose a remote IP (imported route).
+        
+        This is called when the upstream agent detects a remote route
+        that should be imported. However, for VPNv4, we handle route
+        import differently - we monitor kernel VRF tables directly.
+        """
+        LOG.debug("expose_remote_ip called (VPNv4 uses direct VRF monitoring): %s", ip_address)
 
     def withdraw_remote_ip(self, ip_address):
-        """Withdraw a remote IP - not applicable for VPNv4 export."""
-        LOG.debug("withdraw_remote_ip called (not applicable for VPNv4 export): %s", ip_address)
+        """Withdraw a remote IP.
+        
+        This is called when a remote route should be withdrawn.
+        For VPNv4, we handle route withdrawal via VRF monitoring.
+        """
+        LOG.debug("withdraw_remote_ip called (VPNv4 uses direct VRF monitoring): %s", ip_address)
 
     def expose_subnet(self, subnet):
         """Expose a subnet - VPNv4 works at IP level, so this is a no-op."""
@@ -303,4 +347,261 @@ class VPNv4UpstreamDriver(driver_api.AgentDriverBase):
                 LOG.debug("Could not lookup namespace from NB DB: %s", e)
         
         return None
-
+    
+    def _start_route_watcher(self):
+        """Start background thread to monitor imported routes in VRF tables."""
+        if self._route_watcher_thread:
+            return
+        
+        self._route_watcher_thread = Thread(
+            target=self._watch_imported_routes,
+            daemon=True,
+            name="VPNv4RouteWatcher"
+        )
+        self._route_watcher_thread.start()
+        LOG.info("Started VPNv4 route import watcher")
+    
+    def _watch_imported_routes(self):
+        """Background thread that monitors BGP routes in VRF tables and syncs to OVN."""
+        poll_interval = getattr(agent_config.CONF, 'vpnv4_route_poll_interval', 30)
+        
+        while not self._stop_event.is_set():
+            try:
+                self._sync_imported_routes()
+            except Exception as e:
+                LOG.exception("Error syncing imported routes: %s", e)
+            
+            # Wait for next poll or stop signal
+            self._stop_event.wait(poll_interval)
+        
+        LOG.info("VPNv4 route import watcher stopped")
+    
+    def _sync_imported_routes(self):
+        """Sync imported routes from kernel VRF tables to OVN logical routers.
+        
+        For each namespace with a VRF:
+        1. Read BGP routes from the VRF's routing table
+        2. Compare with current imported routes
+        3. Add/update/delete routes in OVN logical router
+        """
+        if not self._nb_idl:
+            LOG.debug("OVN NB IDL not available, skipping route sync")
+            return
+        
+        # Get all active namespaces with VRFs
+        tenants = self._driver.list_tenants()
+        if not tenants:
+            return
+        
+        for tenant in tenants:
+            namespace = tenant.namespace
+            vrf_name = tenant.vrf.name
+            
+            try:
+                # Get VRF table ID
+                vrf_table = self._get_vrf_table(vrf_name)
+                if vrf_table is None:
+                    continue
+                
+                # Read BGP routes from VRF
+                current_routes = self._get_bgp_routes_from_vrf(vrf_table)
+                
+                # Get existing imported routes for this namespace
+                with self._routes_lock:
+                    existing_routes = self._imported_routes.get(namespace, {})
+                
+                # Find changes
+                current_prefixes = set(current_routes.keys())
+                existing_prefixes = set(existing_routes.keys())
+                
+                adds = current_prefixes - existing_prefixes
+                updates = {p: current_routes[p] for p in current_prefixes & existing_prefixes 
+                          if current_routes[p] != existing_routes[p]}
+                deletes = existing_prefixes - current_prefixes
+                
+                if adds or updates or deletes:
+                    LOG.info("Syncing routes for namespace '%s': +%d ~%d -%d",
+                            namespace, len(adds), len(updates), len(deletes))
+                    
+                    # Update OVN logical router
+                    self._sync_routes_to_ovn(namespace, adds | set(updates.keys()), 
+                                            current_routes, deletes)
+                    
+                    # Update our tracking
+                    with self._routes_lock:
+                        self._imported_routes[namespace] = current_routes.copy()
+                
+            except Exception as e:
+                LOG.exception("Error syncing routes for namespace '%s': %s", 
+                             namespace, e)
+    
+    def _get_vrf_table(self, vrf_name: str) -> Optional[int]:
+        """Get routing table ID for a VRF device."""
+        try:
+            with pyroute2.IPRoute() as ipr:
+                links = ipr.link_lookup(ifname=vrf_name)
+                if not links:
+                    return None
+                link_info = ipr.get_links(links[0])[0]
+                # VRF table is in IFLA_INFO_DATA -> IFLA_VRF_TABLE
+                info_data = link_info.get_attr('IFLA_INFO_DATA')
+                if info_data:
+                    table = info_data.get_attr('IFLA_VRF_TABLE')
+                    return table
+        except Exception as e:
+            LOG.debug("Could not get VRF table for %s: %s", vrf_name, e)
+        return None
+    
+    def _get_bgp_routes_from_vrf(self, table_id: int) -> Dict[str, str]:
+        """Read BGP routes from a VRF routing table.
+        
+        Returns:
+            Dict mapping prefix (CIDR) to next_hop IP
+        """
+        routes = {}
+        try:
+            with pyroute2.IPRoute() as ipr:
+                # Filter routes by table and protocol
+                filter_route = {'table': table_id, 'protocol': RTPROT_BGP}
+                vrf_routes = ipr.get_routes(**filter_route)
+                
+                for route in vrf_routes:
+                    # Extract destination prefix
+                    dst = route.get_attr('RTA_DST')
+                    if not dst:
+                        continue
+                    
+                    # Get prefix length
+                    prefixlen = route.get('dst_len', 32)
+                    if route.get('family') == 10:  # AF_INET6
+                        prefixlen = route.get('dst_len', 128)
+                    
+                    prefix = f"{dst}/{prefixlen}"
+                    
+                    # Extract next hop
+                    gw = route.get_attr('RTA_GATEWAY')
+                    if not gw:
+                        continue
+                    
+                    routes[prefix] = str(gw)
+        except Exception as e:
+            LOG.debug("Error reading BGP routes from table %d: %s", table_id, e)
+        
+        return routes
+    
+    def _sync_routes_to_ovn(self, namespace: str, add_prefixes: Set[str],
+                           routes: Dict[str, str], delete_prefixes: Set[str]):
+        """Sync routes to OVN logical router for a namespace.
+        
+        Args:
+            namespace: Kubernetes namespace name
+            add_prefixes: Set of prefixes to add/update
+            routes: Dict mapping prefix to next_hop
+            delete_prefixes: Set of prefixes to delete
+        """
+        if not self._nb_idl:
+            return
+        
+        # Find logical router for this namespace
+        # In OVN-Kubernetes, gateway routers are named GR_<node_name>
+        # For now, we'll need to find the router associated with this namespace
+        # This is a simplified approach - may need refinement based on actual OVN setup
+        
+        # Try to find namespace router by looking for router with namespace in external_ids
+        # or by convention: for default network, use cluster router
+        router_name = self._find_namespace_router(namespace)
+        if not router_name:
+            LOG.debug("Could not find OVN router for namespace '%s'", namespace)
+            return
+        
+        try:
+            # Build OVSDB operations
+            ops = []
+            
+            # Add/update routes
+            for prefix in add_prefixes:
+                next_hop = routes.get(prefix)
+                if not next_hop:
+                    continue
+                
+                # Create LogicalRouterStaticRoute
+                # Note: We need to determine the output port - this depends on
+                # the OVN gateway setup. For now, we'll use a placeholder.
+                # In production, this should be determined from the gateway router config.
+                lrsr = {
+                    'IPPrefix': prefix,
+                    'Nexthop': next_hop,
+                    'ExternalIDs': {
+                        'vpnv4-driver': 'true',
+                        'namespace': namespace,
+                    }
+                }
+                
+                    # Use OVN NB API to add route
+                    try:
+                        self._nb_idl.lr_route_add(
+                            router_name,
+                            prefix,
+                            next_hop,
+                            may_exist=True  # Allow updating existing route
+                        ).execute(check_error=True)
+                        LOG.info("Added route to OVN router %s: %s via %s",
+                                router_name, prefix, next_hop)
+                    except Exception as e:
+                        LOG.exception("Error adding route %s to router %s: %s",
+                                    prefix, router_name, e)
+            
+            # Delete routes
+            for prefix in delete_prefixes:
+                try:
+                    self._nb_idl.lr_route_del(
+                        router_name,
+                        prefix,
+                        if_exists=True  # Don't error if route doesn't exist
+                    ).execute(check_error=True)
+                    LOG.info("Deleted route from OVN router %s: %s",
+                            router_name, prefix)
+                except Exception as e:
+                    LOG.exception("Error deleting route %s from router %s: %s",
+                                prefix, router_name, e)
+                    
+        except Exception as e:
+            LOG.exception("Error syncing routes to OVN for namespace '%s': %s",
+                         namespace, e)
+    
+    def _find_namespace_router(self, namespace: str) -> Optional[str]:
+        """Find OVN logical router for a namespace.
+        
+        In OVN-Kubernetes:
+        - Default network uses 'ovn-cluster-router'
+        - User-defined networks may have gateway routers named GR_<node_name>
+        - For now, we use a simple mapping: try to find router with namespace in external_ids
+        
+        Returns:
+            Router name or None if not found
+        """
+        if not self._nb_idl:
+            return None
+        
+        # For default network, use cluster router
+        if namespace == 'default' or namespace.startswith('kube-'):
+            try:
+                # Verify router exists
+                self._nb_idl.lr_get('ovn-cluster-router').execute(check_error=True)
+                return 'ovn-cluster-router'
+            except Exception:
+                pass
+        
+        # For other namespaces, try to find router with namespace in external_ids
+        # This is a simplified approach - may need refinement
+        try:
+            # Query Logical_Router table for routers with namespace in external_ids
+            # Note: This may not work for all OVN-Kubernetes setups
+            # A more robust approach would query based on network name or CUDN
+            LOG.debug("Looking for router for namespace '%s'", namespace)
+            # For now, return None - route import may need namespace->router mapping
+            # from OVN-Kubernetes configuration
+            return None
+        except Exception as e:
+            LOG.debug("Error finding router for namespace '%s': %s", namespace, e)
+            return None
