@@ -1,0 +1,292 @@
+# ovnkube-master
+# daemonset version 3
+# starts master daemons (ovnkube-master and ovn-northd), each in a separate container
+# it is run on the master(s)
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: ovnkube-master
+  # namespace set up by install
+  namespace: ovn-kubernetes
+  annotations:
+    kubernetes.io/description: |
+      This Deployment launches the ovn-kubernetes master networking components.
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      name: ovnkube-master
+  strategy:
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        name: ovnkube-master
+        component: network
+        type: infra
+        kubernetes.io/os: "linux"
+    spec:
+      priorityClassName: "system-cluster-critical"
+      # Requires fairly broad permissions - ability to read all services and network functions as well
+      # as all pods.
+      serviceAccountName: ovnkube-master
+      hostNetwork: true
+      dnsPolicy: Default
+      
+      # required to be scheduled on a linux node with node-role.kubernetes.io/control-plane label and
+      # only one instance of ovnkube-master pod per node
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: In
+                    values:
+                      - ""
+                  - key: kubernetes.io/os
+                    operator: In
+                    values:
+                      - "linux"
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: name
+                    operator: In
+                    values:
+                      - ovnkube-master
+              topologyKey: kubernetes.io/hostname
+
+      containers:
+      # ovn-northd - v3
+      - name: ovn-northd
+        image: "ghcr.io/dasmlab/ovn-daemonset-fedora:dev"
+        imagePullPolicy: "IfNotPresent"
+
+        command: ["/root/ovnkube.sh", "run-ovn-northd"]
+
+        securityContext:
+          runAsUser: 0
+          capabilities:
+            add: ["SYS_NICE"]
+
+        terminationMessagePolicy: FallbackToLogsOnError
+        volumeMounts:
+        # Run directories where we need to be able to access sockets
+        - mountPath: /var/run/dbus/
+          name: host-var-run-dbus
+          readOnly: true
+        - mountPath: /var/log/openvswitch/
+          name: host-var-log-ovs
+        - mountPath: /var/log/ovn/
+          name: host-var-log-ovs
+        - mountPath: /var/run/openvswitch/
+          name: host-var-run-ovs
+        - mountPath: /var/run/ovn/
+          name: host-var-run-ovs
+        - mountPath: /ovn-cert
+          name: host-ovn-cert
+          readOnly: true
+
+        resources:
+          requests:
+            cpu: 100m
+            memory: 300Mi
+        env:
+        - name: OVN_DAEMONSET_VERSION
+          value: "1.1.0"
+        - name: OVN_LOGLEVEL_NORTHD
+          value: "-vconsole:info -vfile:info"
+        - name: K8S_APISERVER
+          valueFrom:
+            configMapKeyRef:
+              name: ovn-config
+              key: k8s_apiserver
+        - name: OVN_KUBERNETES_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: OVN_SSL_ENABLE
+          value: "no"
+        readinessProbe:
+          exec:
+            command: ["/usr/bin/ovn-kube-util", "readiness-probe", "-t", "ovn-northd"]
+          initialDelaySeconds: 30
+          timeoutSeconds: 30
+          periodSeconds: 60
+      # end of container
+
+      - name: ovnkube-master
+        image: "ghcr.io/dasmlab/ovn-daemonset-fedora:dev"
+        imagePullPolicy: "IfNotPresent"
+        
+        command: ["/root/ovnkube.sh", "ovn-master"]
+        securityContext:
+          runAsUser: 0
+        
+        terminationMessagePolicy: FallbackToLogsOnError
+        volumeMounts:
+        # Run directories where we need to be able to access sockets
+        - mountPath: /var/run/dbus/
+          name: host-var-run-dbus
+          readOnly: true
+        - mountPath: /var/log/ovn-kubernetes/
+          name: host-var-log-ovnkube
+        - mountPath: /var/run/openvswitch/
+          name: host-var-run-ovs
+        - mountPath: /var/run/ovn/
+          name: host-var-run-ovs
+        - mountPath: /ovn-cert
+          name: host-ovn-cert
+          readOnly: true
+        
+        resources:
+          requests:
+            cpu: 100m
+            memory: 300Mi
+        env:
+        - name: OVN_DAEMONSET_VERSION
+          value: "1.1.0"
+        - name: OVNKUBE_LOGLEVEL
+          value: "4"
+        - name: OVNKUBE_LOGFILE_MAXSIZE
+          value: "100"
+        - name: OVNKUBE_LOGFILE_MAXBACKUPS
+          value: "5"
+        - name: OVNKUBE_LOGFILE_MAXAGE
+          value: "5"
+        - name: OVNKUBE_LIBOVSDB_CLIENT_LOGFILE
+          value: ""
+        - name: OVNKUBE_CONFIG_DURATION_ENABLE
+          value: ""
+        - name: OVNKUBE_METRICS_SCALE_ENABLE
+          value: ""
+        - name: OVNKUBE_COMPACT_MODE_ENABLE
+          value: "false"
+        - name: OVN_NET_CIDR
+          valueFrom:
+            configMapKeyRef:
+              name: ovn-config
+              key: net_cidr
+        - name: OVN_SVC_CIDR
+          valueFrom:
+            configMapKeyRef:
+              name: ovn-config
+              key: svc_cidr
+        - name: K8S_APISERVER
+          valueFrom:
+            configMapKeyRef:
+              name: ovn-config
+              key: k8s_apiserver
+        - name: K8S_NODE
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: K8S_NODE_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.hostIP
+        - name: OVN_KUBERNETES_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: OVN_HYBRID_OVERLAY_ENABLE
+          value: ""
+        - name: OVN_ADMIN_NETWORK_POLICY_ENABLE
+          value: ""
+        - name: OVN_EGRESSIP_ENABLE
+          value: ""
+        - name: OVN_EGRESSIP_HEALTHCHECK_PORT
+          value: ""
+        - name: OVN_EGRESSFIREWALL_ENABLE
+          value: ""
+        - name: OVN_EGRESSQOS_ENABLE
+          value: ""
+        - name: OVN_MULTI_NETWORK_ENABLE
+          value: ""
+        - name: OVN_NETWORK_SEGMENTATION_ENABLE
+          value: ""
+        - name: OVN_ROUTE_ADVERTISEMENTS_ENABLE
+          value: ""
+        - name: OVN_ADVERTISED_UDN_ISOLATION_MODE
+          value: ""
+        - name: OVN_EGRESSSERVICE_ENABLE
+          value: ""
+        - name: OVN_HYBRID_OVERLAY_NET_CIDR
+          value: ""
+        - name: OVN_DISABLE_SNAT_MULTIPLE_GWS
+          value: ""
+        - name: OVN_DISABLE_FORWARDING
+          value: ""
+        - name: OVN_ENCAP_PORT
+          value: ""
+        - name: OVN_EMPTY_LB_EVENTS
+          value: ""
+        - name: OVN_V4_JOIN_SUBNET
+          value: ""
+        - name: OVN_V6_JOIN_SUBNET
+          value: ""
+        - name: OVN_V4_MASQUERADE_SUBNET
+          value: ""
+        - name: OVN_V6_MASQUERADE_SUBNET
+          value: ""
+        - name: OVN_SSL_ENABLE
+          value: "no"
+        - name: OVN_GATEWAY_MODE
+          value: "shared"
+        - name: OVN_GATEWAY_OPTS
+          value: ""
+        - name: OVN_MULTICAST_ENABLE
+          value: ""
+        - name: OVN_ACL_LOGGING_RATE_LIMIT
+          value: "20"
+        - name: OVN_STATELESS_NETPOL_ENABLE
+          value: ""
+        - name: OVN_ENABLE_MULTI_EXTERNAL_GATEWAY
+          value: ""
+        - name: OVN_ENABLE_SVC_TEMPLATE_SUPPORT
+          value: "true"
+        - name: OVN_NOHOSTSUBNET_LABEL
+          value: ""
+        - name: OVN_DISABLE_REQUESTEDCHASSIS
+          value: "false"
+        - name: OVN_HOST_NETWORK_NAMESPACE
+          valueFrom:
+            configMapKeyRef:
+              name: ovn-config
+              key: host_network_namespace
+        - name: OVN_ENABLE_PERSISTENT_IPS
+          value: ""
+        - name: OVN_NETWORK_QOS_ENABLE
+          value: ""
+        - name: OVN_ENABLE_DNSNAMERESOLVER
+          value: "false"
+      # end of container
+
+      volumes:
+      # TODO: Need to check why we need this?
+      - name: host-var-run-dbus
+        hostPath:
+          path: /var/run/dbus
+      - name: host-var-log-ovs
+        hostPath:
+          path: /var/log/openvswitch
+      - name: host-var-log-ovnkube
+        hostPath:
+          path: /var/log/ovn-kubernetes
+      - name: host-var-run-ovs
+        hostPath:
+          path: /var/run/openvswitch
+      - name: host-ovn-cert
+        hostPath:
+          path: /etc/ovn
+          type: DirectoryOrCreate
+      
+      tolerations:
+      - operator: "Exists"

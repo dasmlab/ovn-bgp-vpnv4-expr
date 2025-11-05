@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=67", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ovn-bgp-vpnv4"
+version = "0.1.0"
+description = "Experimental vpnv4 driver scaffolding for ovn-bgp-agent"
+authors = [{ name = "DASM Lab" }]
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: POSIX :: Linux",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7",
+]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra"
+testpaths = [
+    "tests/unit",
+]
+

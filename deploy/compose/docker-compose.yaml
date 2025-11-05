@@ -1,0 +1,61 @@
+version: "3.9"
+
+networks:
+  kind:
+    external: true
+  bgp-mgmt:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.31.100.0/24
+
+services:
+  frr:
+    build:
+      context: ..
+      dockerfile: frr/Dockerfile
+    image: frr-vpnv4-local
+    container_name: frr-vpnv4
+    privileged: true
+    networks:
+      kind:
+        aliases:
+          - frr.local
+      bgp-mgmt:
+        ipv4_address: 172.31.100.12
+    volumes:
+      - ../frr/frr.conf:/etc/frr/frr.conf:ro
+      - ../frr/vpnv4.conf:/etc/frr/vpnv4.conf:ro
+      - ../frr/frr.merged.conf:/etc/frr/frr.merged.conf:ro
+      - ../frr/daemons:/etc/frr/daemons:ro
+      - ../frr/vtysh.conf:/etc/frr/vtysh.conf:ro
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    healthcheck:
+      test: [ "CMD", "/usr/lib/frr/frr-reload.py", "--test", "/etc/frr/frr.conf" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  gobgp:
+    image: osrg/gobgp:latest
+    container_name: gobgp-fortigate-sim
+    entrypoint: [ "gobgpd" ]
+    command: [ "-f", "/etc/gobgp/gobgp.conf" ]
+    networks:
+      kind:
+        aliases:
+          - fortigate-sim.local
+      bgp-mgmt:
+        ipv4_address: 172.31.100.11
+    volumes:
+      - ../gobgp/gobgp.conf:/etc/gobgp/gobgp.conf:ro
+    healthcheck:
+      test: [ "CMD", "gobgp", "neighbor" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+

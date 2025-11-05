@@ -1,0 +1,29 @@
+{
+  "global": {
+    "local_asn": 65000,
+    "router_id": "10.255.0.2",
+    "rd_base": 65000,
+    "rt_base": 65000,
+    "neighbors": [
+      {
+        "address": "172.31.100.11",
+        "remote_asn": 65100,
+        "description": "FortiGate-sim"
+      }
+    ]
+  },
+  "tenants": [
+    {
+      "namespace": "demo",
+      "prefixes": [
+        "10.244.0.0/24"
+      ]
+    },
+    {
+      "namespace": "demo-b",
+      "prefixes": [
+        "10.245.0.0/24"
+      ]
+    }
+  ]
+}

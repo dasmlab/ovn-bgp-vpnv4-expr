@@ -1,0 +1,77 @@
+---
+# ovn-namespace.yaml
+#
+# Setup for Kubernetes to support the ovn-kubernetes plugin
+#
+# Create the namespace for ovn-kubernetes.
+#
+# This provisioning is done as part of installation after the cluster is
+# up and before the ovn daemonsets are created.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ovn-kubernetes
+
+---
+# ovn-policy.yaml
+#
+# Setup for Kubernetes to support the ovn-kubernetes plugin
+#
+# Create the service account and policies.
+# ovnkube interacts with kubernetes and the environment
+# must be properly set up.
+# 
+# This provisioning is done as part of installation after the cluster is
+# up and before the ovn daemonsets are created.
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: ovn-kubernetes
+  name: ovn-k8s-configmap
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "watch", "list"]
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - create
+  - get
+  - list
+  - update
+
+---
+
+# The network cidr and service cidr are set in the ovn-config configmap
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: ovn-config
+  namespace: ovn-kubernetes
+data:
+  net_cidr:      "10.244.0.0/16"
+  svc_cidr:      "10.96.0.0/16"
+  k8s_apiserver: "10.0.2.16:6443"
+  mtu:           "1400"
+  host_network_namespace: "ovn-host-network"
+
+
+---
+# ovn-host-network-namespace.yaml
+#
+# Create the namespace for classifying host network traffic.
+#
+# This provisioning is done as part of installation after the cluster is
+# up and before the ovn daemonsets are created.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: "ovn-host-network"
+
+
