@@ -20,6 +20,9 @@ dependencies = [
 [project.scripts]
 vpnv4-agent = "vpnv4_agent.main:main"
 
+[project.entry-points."ovn_bgp_agent.drivers"]
+vpnv4_driver = "ovn_bgp_agent.drivers.upstream_vpnv4_driver:VPNv4UpstreamDriver"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=7",

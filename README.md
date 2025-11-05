@@ -12,7 +12,8 @@ OVN-BGP → FortiGate VPNv4 Experiment
 - ✅ **OVN watcher integration:** Agent successfully polls OVN NB DB and generates VPNv4 configs in real-time as namespaces/pods are created.
 - ✅ **VRF name sanitization:** Namespace names are automatically sanitized to Linux-safe VRF device names (e.g., `kube-system` → `vrf34816`).
 - ✅ **Production cluster documentation:** Deployment guides for k3s and OpenShift clusters with kernel module requirements.
-- 🚧 **Upstream wiring outstanding:** the experimental driver lives under `src/ovn_bgp_vpnv4/` and is not yet integrated with the upstream `ovn-bgp-agent` event loop.
+- 🚧 **Upstream integration analysis:** Created skeleton driver (`upstream_vpnv4_driver.py`) and documented integration requirements. The upstream `ovn-bgp-agent` uses a different API (IP-oriented vs our namespace-oriented), requiring further investigation into namespace context extraction.
+- ✅ **Standalone agent ready:** The `vpnv4-agent` can be deployed independently and works end-to-end. This is the recommended approach for production testing.
 - 🚧 **Production cluster testing pending:** Validation on real k3s/OCP clusters before upstream PR submission.
 
 Tag the repo (e.g. `git tag poc-vpnv4-lab`) after a successful `lab-up` run to share the current proof-of-concept snapshot.
@@ -315,6 +316,7 @@ flowchart LR
 - `docs/k3s-deployment.md` — step-by-step k3s deployment guide.
 - `docs/ocp-deployment.md` — step-by-step OpenShift deployment guide.
 - `docs/testing.md` — production cluster testing procedures and validation.
+- `docs/upstream-integration.md` — analysis of upstream `ovn-bgp-agent` integration requirements and challenges.
 - `docs/config-samples.md` — FRR, GoBGP, and FortiGate config snippets.
 - `src/ovn_bgp_vpnv4/` — driver scaffolding source code and tests.
 - `src/ovn_bgp_agent/` — lightweight driver registry + vpnv4 adapter used for integration tests.
