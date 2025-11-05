@@ -108,6 +108,28 @@ class VPNv4RouteDriver:
         self.render()
         return tenant
 
+    def synchronize_prefixes(
+        self, namespace: str, prefixes: Iterable[str]
+    ) -> TenantContext:
+        """Apply ``prefixes`` as the desired state for ``namespace``.
+
+        This helper is designed for higher-level controllers (e.g. the
+        upstream ovn-bgp-agent watcher) which reconcile the full list of
+        prefixes each time they observe a change.  It avoids redundant render
+        cycles when the computed prefix set does not change.
+        """
+
+        tenant = self.ensure_namespace(namespace)
+        desired = list(dict.fromkeys(prefixes))
+        if tenant.advertised_prefixes == desired:
+            LOG.debug("Namespace %s already advertising desired prefixes", namespace)
+            return tenant
+
+        tenant.set_prefixes(desired)
+        LOG.debug("Namespace %s synchronized prefixes: %s", namespace, desired)
+        self.render()
+        return tenant
+
     # ------------------------------------------------------------------
     # Rendering / orchestration
     # ------------------------------------------------------------------

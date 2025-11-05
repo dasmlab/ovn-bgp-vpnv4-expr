@@ -258,9 +258,9 @@ kubectl --kubeconfig "${KUBECONFIG_PATH}" wait --for=condition=Ready pod -l app=
 echo "[lab-up] step 3/4: launching FRR + FortiGate simulator via docker compose"
 docker compose -f "${COMPOSE_FILE}" up -d
 
-echo "[lab-up] step 4/4: verifying BGP peers"
+echo "[lab-up] step 4/4: verifying vpnv4 control plane"
 sleep 10
-docker exec frr-vpnv4 vtysh -c "show bgp vpnv4 summary" || true
+python3 "${SCRIPT_DIR}/validate_vpnv4.py"
 
 echo "[lab-up] Lab bring-up routine completed."
 

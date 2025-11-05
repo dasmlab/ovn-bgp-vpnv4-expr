@@ -43,6 +43,7 @@ Contributors copy this file to `scripts/lab/.env` and adjust values for their se
    - Launches FRR + FortiGate simulator via Compose.
    - Applies generated FRR configs from `deploy/frr/`.
    - Loads required kernel modules via `modprobe mpls_router mpls_iptunnel` (if not already present).
+   - Runs `scripts/lab/validate_vpnv4.py` to assert vpnv4 sessions and VRF routes.
 3. `make test`
    - Runs unit tests (pytest/go) and integration suite hitting simulator API.
 4. `make observe`

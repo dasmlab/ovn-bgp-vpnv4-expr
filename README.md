@@ -6,6 +6,8 @@ OVN-BGP → FortiGate VPNv4 Experiment
 - ✅ **Control plane proven in lab:** `make lab-up && make vpnv4-apply` brings up a kind + OVN-Kubernetes cluster where FRR advertises multiple VRFs (`demo`, `demo-b`) via MP-BGP VPNv4.
 - ✅ **Kernel routes installed:** `scripts/vpnv4/setup_vrfs.py` creates the Linux VRF devices and blackhole routes so the prefixes persist in `ip route show vrf <name>`.
 - ✅ **FortiGate simulator acceptance:** GoBGP imports both RDs/RTs and exposes them via `gobgp vrf demo{,-b} rib` and the global VPNv4 table.
+- ✅ **Agent integration scaffolded:** `src/ovn_bgp_agent/` hosts a lightweight driver registry and vpnv4 adapter mirroring the upstream `ovn-bgp-agent` contract.
+- ✅ **Automated lab validation:** `scripts/lab/validate_vpnv4.py` runs at the end of `lab-up` to assert FRR/GoBGP session state and VRF routes.
 - 🚧 **Upstream wiring outstanding:** the experimental driver lives under `src/ovn_bgp_vpnv4/` and is not yet integrated with the upstream `ovn-bgp-agent` event loop.
 - 🚧 **OCP / hardware validation pending:** packaging and FortiGate appliance tests are queued once the driver is upstreamed.
 
@@ -281,6 +283,8 @@ flowchart LR
 - `docs/testing-environment.md` — dependency + bootstrap guide.
 - `docs/config-samples.md` — FRR, GoBGP, and FortiGate config snippets.
 - `src/ovn_bgp_vpnv4/` — driver scaffolding source code and tests.
+- `src/ovn_bgp_agent/` — lightweight driver registry + vpnv4 adapter used for integration tests.
+- `deploy/ocp/` — OpenShift MachineConfig, ConfigMap, and DaemonSet patch samples for the vpnv4 driver.
 
 ---
 

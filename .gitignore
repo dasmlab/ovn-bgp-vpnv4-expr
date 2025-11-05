@@ -1,1 +1,3 @@
 externals/ovn-kubernetes
+__pycache__/
+*.pyc
