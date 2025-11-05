@@ -83,6 +83,11 @@ data:
           remote_asn: 65102
         - address: 192.0.2.13
           remote_asn: 65103
+    watchers:
+      - type: ovn
+        options:
+          connection: unix:/var/run/ovn/ovnnb_db.sock
+          interval: 5
     tenants.json: |
       {
         "tenants": [
@@ -94,6 +99,10 @@ data:
 Mount the ConfigMap as a volume so the binary finds both `vpnv4.yaml` and the
 `tenants.json` file watched by the file-based namespace watcher.  Automating the
 tenants feed (e.g. via a controller) is a follow-up task.
+
+When `watchers` includes an entry of `type: ovn`, the agent polls the OVN
+Northbound DB directly and emits namespace events based on logical switch port
+addresses. Provide a valid `options.connection` URI for your control-plane.
 
 ## 4. DaemonSet patch (driver wiring)
 

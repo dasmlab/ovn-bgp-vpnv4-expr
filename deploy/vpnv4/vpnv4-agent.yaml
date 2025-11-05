@@ -10,7 +10,9 @@ driver:
     - address: 172.31.100.11
       remote_asn: 65100
 watchers:
-  - type: file
-    path: deploy/vpnv4/tenants.json
-    interval: 2
+  - type: ovn
+    path: .
+    options:
+      connection: tcp:127.0.0.1:6641
+      interval: 5
 

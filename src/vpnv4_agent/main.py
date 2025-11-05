@@ -14,7 +14,7 @@ from ovn_bgp_agent.drivers import build_vpnv4_adapter
 from ovn_bgp_vpnv4.driver import VPNv4RouteDriver
 
 from .config import load_config
-from .watchers import FileNamespaceWatcher
+from .watchers import FileNamespaceWatcher, create_ovn_watcher
 
 LOG = logging.getLogger(__name__)
 
@@ -71,18 +71,30 @@ def main(argv: list[str] | None = None) -> int:
                 interval=watcher_cfg.interval,
                 stop_event=stop_event,
             )
+            try:
+                watcher.poll()
+            except Exception:  # pragma: no cover - logged inside watcher
+                LOG.exception(
+                    "initial poll failed for watcher %s", watcher_cfg.path
+                )
+            watcher.start()
+            watchers.append(watcher)
+        elif watcher_cfg.type in {"ovn", "ovn-nb"}:
+            watcher = create_ovn_watcher(
+                registry=registry,
+                options=watcher_cfg.options,
+                stop_event=stop_event,
+                default_interval=watcher_cfg.interval,
+            )
+            watcher.start()
+            watchers.append(watcher)
         else:
             raise ValueError(f"unsupported watcher type '{watcher_cfg.type}'")
-        # Perform an initial poll so we react immediately
-        try:
-            watcher.poll()
-        except Exception:  # pragma: no cover - logged inside watcher
-            LOG.exception("initial poll failed for watcher %s", watcher_cfg.path)
-        watcher.start()
-        watchers.append(watcher)
 
     if not watchers:
         LOG.warning("no watchers configured; agent will idle")
+    else:
+        LOG.info("vpnv4 agent started with %d watcher(s)", len(watchers))
 
     def _shutdown(signum, frame):  # pragma: no cover - signal handler
         LOG.info("received signal %s, shutting down", signum)

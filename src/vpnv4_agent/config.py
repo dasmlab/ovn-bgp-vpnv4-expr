@@ -39,6 +39,7 @@ class WatcherConfig:
     type: str
     path: Path
     interval: float = 5.0
+    options: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -89,16 +90,18 @@ def _parse_driver(section: dict) -> DriverConfig:
         export_ipv6=bool(section.get("export_ipv6", False)),
         maintain_empty_vrf=bool(section.get("maintain_empty_vrf", True)),
     )
-
-
 def _parse_watchers(entries: Iterable[dict]) -> List[WatcherConfig]:
     watchers: List[WatcherConfig] = []
     for entry in entries:
+        options = entry.get("options", {})
+        if not isinstance(options, dict):
+            raise ValueError("watcher 'options' must be a mapping if provided")
         watchers.append(
             WatcherConfig(
                 type=str(entry["type"]),
-                path=Path(entry["path"]),
-                interval=float(entry.get("interval", 5.0)),
+                path=Path(entry.get("path", ".")),
+                interval=float(entry.get("interval", entry.get("poll_interval", 5.0))),
+                options=options,
             )
         )
     return watchers

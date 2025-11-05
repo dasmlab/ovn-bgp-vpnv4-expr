@@ -31,4 +31,5 @@ addopts = "-ra"
 testpaths = [
     "tests/unit",
 ]
+pythonpath = ["src"]
 

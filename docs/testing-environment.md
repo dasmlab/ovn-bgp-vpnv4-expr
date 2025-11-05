@@ -49,6 +49,8 @@ Contributors copy this file to `scripts/lab/.env` and adjust values for their se
    - Push with `make agent-push` when ready to stage on OCP/k3s.
 4. `make test`
    - Runs unit tests (pytest/go) and integration suite hitting simulator API.
+5. Configure `deploy/vpnv4/vpnv4-agent.yaml`
+   - Default watcher polls `tenants.json`; add an OVN watcher entry with `type: ovn` and an `options.connection` pointing at your NB DB to source prefixes directly from OVN.
 5. `make observe`
    - Captures BGP tables, Prometheus metrics, and pcaps into `artifacts/`.
 6. `make lab-down`
