@@ -222,21 +222,34 @@ if ! curl -sfL https://get.k3s.io | K3S_URL="https://\${CONTROL_IP}:6443" K3S_TO
     exit 1
 fi
 
-# Wait for k3s to be ready
+# Wait for k3s agent to start (with retries for slower systems)
 echo "[k3s-worker] Waiting for k3s agent to start..."
+timeout=120
+elapsed=0
+while ! systemctl is-active --quiet k3s-agent; do
+    if [ $elapsed -ge $timeout ]; then
+        echo "[k3s-worker] ERROR: k3s agent did not start within ${timeout}s"
+        echo "[k3s-worker] Service status:"
+        sudo systemctl status k3s-agent --no-pager -l || true
+        echo "[k3s-worker] Recent logs:"
+        sudo journalctl -u k3s-agent --no-pager -n 30 2>/dev/null || true
+        exit 1
+    fi
+    sleep 3
+    elapsed=$((elapsed + 3))
+    if [ $((elapsed % 15)) -eq 0 ]; then
+        echo "[k3s-worker] Still waiting for agent to start... (${elapsed}s elapsed)"
+    fi
+done
+
+# Give it a bit more time to fully initialize
+echo "[k3s-worker] Agent is active, waiting for full initialization..."
 sleep 5
 
 # Verify installation
-if systemctl is-active --quiet k3s-agent; then
-    echo "[k3s-worker] k3s worker installed successfully!"
-    echo "[k3s-worker] Agent status:"
-    sudo systemctl status k3s-agent --no-pager -l
-else
-    echo "[k3s-worker] ERROR: k3s agent did not start"
-    sudo systemctl status k3s-agent --no-pager -l
-    sudo journalctl -u k3s-agent --no-pager -n 30 2>/dev/null || true
-    exit 1
-fi
+echo "[k3s-worker] k3s worker installed successfully!"
+echo "[k3s-worker] Agent status:"
+sudo systemctl status k3s-agent --no-pager -l
 EOF
     echo "[install] ERROR: Failed to install k3s on ${WORKER1_HOST}"
     exit 1
@@ -273,29 +286,68 @@ if ! curl -sfL https://get.k3s.io | K3S_URL="https://\${CONTROL_IP}:6443" K3S_TO
     exit 1
 fi
 
-# Wait for k3s to be ready
+# Wait for k3s agent to start (with retries for slower systems)
 echo "[k3s-worker] Waiting for k3s agent to start..."
+timeout=120
+elapsed=0
+while ! systemctl is-active --quiet k3s-agent; do
+    if [ $elapsed -ge $timeout ]; then
+        echo "[k3s-worker] ERROR: k3s agent did not start within ${timeout}s"
+        echo "[k3s-worker] Service status:"
+        sudo systemctl status k3s-agent --no-pager -l || true
+        echo "[k3s-worker] Recent logs:"
+        sudo journalctl -u k3s-agent --no-pager -n 30 2>/dev/null || true
+        exit 1
+    fi
+    sleep 3
+    elapsed=$((elapsed + 3))
+    if [ $((elapsed % 15)) -eq 0 ]; then
+        echo "[k3s-worker] Still waiting for agent to start... (${elapsed}s elapsed)"
+    fi
+done
+
+# Give it a bit more time to fully initialize
+echo "[k3s-worker] Agent is active, waiting for full initialization..."
 sleep 5
 
 # Verify installation
-if systemctl is-active --quiet k3s-agent; then
-    echo "[k3s-worker] k3s worker installed successfully!"
-    echo "[k3s-worker] Agent status:"
-    sudo systemctl status k3s-agent --no-pager -l
-else
-    echo "[k3s-worker] ERROR: k3s agent did not start"
-    sudo systemctl status k3s-agent --no-pager -l
-    sudo journalctl -u k3s-agent --no-pager -n 30 2>/dev/null || true
-    exit 1
-fi
+echo "[k3s-worker] k3s worker installed successfully!"
+echo "[k3s-worker] Agent status:"
+sudo systemctl status k3s-agent --no-pager -l
 EOF
     echo "[install] ERROR: Failed to install k3s on ${WORKER2_HOST}"
     exit 1
 fi
 
-# Wait for workers to join
+# Wait for workers to join cluster and appear in node list
 echo "[install] Waiting for workers to join cluster..."
-sleep 10
+timeout=120
+elapsed=0
+EXPECTED_NODES=3  # 1 control + 2 workers
+
+while true; do
+    NODE_COUNT=$(ssh ${SSH_OPTS} "${SSH_USER}@${CONTROL_NODE}" "sudo k3s kubectl get nodes --no-headers 2>/dev/null | wc -l" || echo "0")
+    
+    if [ "$NODE_COUNT" -ge "$EXPECTED_NODES" ]; then
+        echo "[install] ✓ All ${EXPECTED_NODES} nodes are in the cluster"
+        break
+    fi
+    
+    if [ $elapsed -ge $timeout ]; then
+        echo "[install] WARNING: Not all nodes joined within ${timeout}s"
+        echo "[install] Current node count: ${NODE_COUNT} (expected: ${EXPECTED_NODES})"
+        echo "[install] Node status:"
+        ssh ${SSH_OPTS} "${SSH_USER}@${CONTROL_NODE}" "sudo k3s kubectl get nodes" || true
+        # Don't exit - continue to show status
+        break
+    fi
+    
+    sleep 5
+    elapsed=$((elapsed + 5))
+    if [ $((elapsed % 15)) -eq 0 ]; then
+        echo "[install] Waiting for workers to join... (${elapsed}s elapsed, ${NODE_COUNT}/${EXPECTED_NODES} nodes)"
+    fi
+done
 
 # Step 4: Load MPLS modules
 if [ "$SKIP_MPLS" = false ]; then
