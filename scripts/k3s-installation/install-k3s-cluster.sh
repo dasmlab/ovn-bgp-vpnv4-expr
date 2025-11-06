@@ -344,8 +344,17 @@ while true; do
         echo "[install] WARNING: Not all nodes joined within ${TIMEOUT}s"
         echo "[install] Current node count: ${NODE_COUNT} (expected: ${EXPECTED_NODES})"
         echo "[install] Nodes found: ${NODE_NAMES}"
+        echo "[install] Raw kubectl output:"
+        echo "$NODES_OUTPUT" | while IFS= read -r line; do
+            echo "  $line"
+        done
         echo "[install] Full node status:"
-        ssh ${SSH_OPTS} "${SSH_USER}@${CONTROL_NODE}" "sudo k3s kubectl get nodes" || true
+        ssh ${SSH_OPTS} "${SSH_USER}@${CONTROL_NODE}" "sudo k3s kubectl get nodes -o wide" || true
+        # If we have at least the control node, continue anyway (cluster is functional)
+        if [ "$NODE_COUNT" -ge 1 ]; then
+            echo "[install] Continuing with ${NODE_COUNT} node(s) - cluster is functional"
+            break
+        fi
         # Don't exit - continue to show status
         break
     fi
