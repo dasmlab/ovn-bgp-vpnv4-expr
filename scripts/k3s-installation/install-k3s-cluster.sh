@@ -224,11 +224,11 @@ fi
 
 # Wait for k3s agent to start (with retries for slower systems)
 echo "[k3s-worker] Waiting for k3s agent to start..."
-timeout=120
-elapsed=0
+TIMEOUT=120
+ELAPSED=0
 while ! systemctl is-active --quiet k3s-agent; do
-    if [ $elapsed -ge $timeout ]; then
-        echo "[k3s-worker] ERROR: k3s agent did not start within ${timeout}s"
+    if [ ${ELAPSED} -ge ${TIMEOUT} ]; then
+        echo "[k3s-worker] ERROR: k3s agent did not start within ${TIMEOUT}s"
         echo "[k3s-worker] Service status:"
         sudo systemctl status k3s-agent --no-pager -l || true
         echo "[k3s-worker] Recent logs:"
@@ -236,9 +236,9 @@ while ! systemctl is-active --quiet k3s-agent; do
         exit 1
     fi
     sleep 3
-    elapsed=$((elapsed + 3))
-    if [ $((elapsed % 15)) -eq 0 ]; then
-        echo "[k3s-worker] Still waiting for agent to start... (${elapsed}s elapsed)"
+    ELAPSED=$((ELAPSED + 3))
+    if [ $((ELAPSED % 15)) -eq 0 ]; then
+        echo "[k3s-worker] Still waiting for agent to start... (${ELAPSED}s elapsed)"
     fi
 done
 
@@ -288,11 +288,11 @@ fi
 
 # Wait for k3s agent to start (with retries for slower systems)
 echo "[k3s-worker] Waiting for k3s agent to start..."
-timeout=120
-elapsed=0
+TIMEOUT=120
+ELAPSED=0
 while ! systemctl is-active --quiet k3s-agent; do
-    if [ $elapsed -ge $timeout ]; then
-        echo "[k3s-worker] ERROR: k3s agent did not start within ${timeout}s"
+    if [ ${ELAPSED} -ge ${TIMEOUT} ]; then
+        echo "[k3s-worker] ERROR: k3s agent did not start within ${TIMEOUT}s"
         echo "[k3s-worker] Service status:"
         sudo systemctl status k3s-agent --no-pager -l || true
         echo "[k3s-worker] Recent logs:"
@@ -300,9 +300,9 @@ while ! systemctl is-active --quiet k3s-agent; do
         exit 1
     fi
     sleep 3
-    elapsed=$((elapsed + 3))
-    if [ $((elapsed % 15)) -eq 0 ]; then
-        echo "[k3s-worker] Still waiting for agent to start... (${elapsed}s elapsed)"
+    ELAPSED=$((ELAPSED + 3))
+    if [ $((ELAPSED % 15)) -eq 0 ]; then
+        echo "[k3s-worker] Still waiting for agent to start... (${ELAPSED}s elapsed)"
     fi
 done
 
@@ -321,8 +321,8 @@ fi
 
 # Wait for workers to join cluster and appear in node list
 echo "[install] Waiting for workers to join cluster..."
-timeout=120
-elapsed=0
+TIMEOUT=120
+ELAPSED=0
 EXPECTED_NODES=3  # 1 control + 2 workers
 
 while true; do
@@ -333,8 +333,8 @@ while true; do
         break
     fi
     
-    if [ $elapsed -ge $timeout ]; then
-        echo "[install] WARNING: Not all nodes joined within ${timeout}s"
+    if [ ${ELAPSED} -ge ${TIMEOUT} ]; then
+        echo "[install] WARNING: Not all nodes joined within ${TIMEOUT}s"
         echo "[install] Current node count: ${NODE_COUNT} (expected: ${EXPECTED_NODES})"
         echo "[install] Node status:"
         ssh ${SSH_OPTS} "${SSH_USER}@${CONTROL_NODE}" "sudo k3s kubectl get nodes" || true
@@ -343,9 +343,9 @@ while true; do
     fi
     
     sleep 5
-    elapsed=$((elapsed + 5))
-    if [ $((elapsed % 15)) -eq 0 ]; then
-        echo "[install] Waiting for workers to join... (${elapsed}s elapsed, ${NODE_COUNT}/${EXPECTED_NODES} nodes)"
+    ELAPSED=$((ELAPSED + 5))
+    if [ $((ELAPSED % 15)) -eq 0 ]; then
+        echo "[install] Waiting for workers to join... (${ELAPSED}s elapsed, ${NODE_COUNT}/${EXPECTED_NODES} nodes)"
     fi
 done
 
