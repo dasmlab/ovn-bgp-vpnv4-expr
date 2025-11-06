@@ -3,14 +3,15 @@
 # Usage: ./install-k3s-cluster.sh [--skip-mpls] [--skip-verify] [--user USER]
 #
 # Prerequisites:
-# - SSH access to all nodes with sudo privileges
-# - Passwordless SSH or SSH keys configured
+# - SSH access to all nodes as a sudo user
+# - SSH keys configured for passwordless access
+# - User has passwordless sudo privileges
 # - Control node: 10.20.1.100 (k3s-control)
 # - Worker 1: 10.20.1.101 (k3s-worker-1)
 # - Worker 2: 10.20.1.102 (k3s-worker-2)
 #
 # Environment variables:
-# - SSH_USER: SSH user (default: root)
+# - SSH_USER: SSH user (default: current user, or set via --user)
 # - SSH_OPTS: Additional SSH options
 
 set -euo pipefail
@@ -28,7 +29,7 @@ WORKER2_HOST="k3s-worker-2"
 # Options
 SKIP_MPLS=false
 SKIP_VERIFY=false
-SSH_USER="${SSH_USER:-root}"
+SSH_USER="${SSH_USER:-${USER}}"
 SSH_OPTS="${SSH_OPTS:--o StrictHostKeyChecking=no -o ConnectTimeout=10}"
 
 while [[ $# -gt 0 ]]; do
@@ -48,6 +49,9 @@ while [[ $# -gt 0 ]]; do
         *)
             echo "Unknown option: $1"
             echo "Usage: $0 [--skip-mpls] [--skip-verify] [--user USER]"
+            echo ""
+            echo "Default SSH user: ${USER} (current user)"
+            echo "Ensure the user has passwordless sudo on all nodes"
             exit 1
             ;;
     esac
@@ -69,14 +73,23 @@ for node in "${CONTROL_NODE}" "${WORKER1_NODE}" "${WORKER2_NODE}"; do
     if ! ssh ${SSH_OPTS} "${SSH_USER}@${node}" "echo 'SSH OK'" >/dev/null 2>&1; then
         echo "[install] ERROR: Cannot SSH to ${SSH_USER}@${node}"
         echo "[install] Please ensure:"
-        echo "  - SSH keys are configured (or use --user with password auth)"
-        echo "  - User has sudo privileges"
+        echo "  - SSH keys are configured for ${SSH_USER}"
+        echo "  - User has passwordless sudo privileges"
         echo "  - Nodes are reachable"
         echo ""
         echo "[install] Try: ssh ${SSH_USER}@${node} 'echo test'"
         exit 1
     fi
-    echo "[install] ✓ SSH access to ${SSH_USER}@${node}"
+    
+    # Verify sudo access
+    if ! ssh ${SSH_OPTS} "${SSH_USER}@${node}" "sudo -n echo 'sudo OK'" >/dev/null 2>&1; then
+        echo "[install] ERROR: User ${SSH_USER}@${node} does not have passwordless sudo"
+        echo "[install] Please configure passwordless sudo:"
+        echo "  echo '${SSH_USER} ALL=(ALL) NOPASSWD: ALL' | sudo tee /etc/sudoers.d/${SSH_USER}"
+        exit 1
+    fi
+    
+    echo "[install] ✓ SSH and sudo access to ${SSH_USER}@${node}"
 done
 echo ""
 

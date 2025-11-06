@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Load MPLS kernel modules on a node
 # Usage: ./load-mpls-modules.sh
+# Note: This script should be run via SSH as a sudo user
 
 set -euo pipefail
 
@@ -15,14 +16,14 @@ if [ "$(printf '%s\n' "$REQUIRED_VERSION" "$KERNEL_VERSION" | sort -V | head -n1
     echo "[mpls-modules] Recommended: kernel 5.15+"
 fi
 
-# Check if modules exist
-if ! find /lib/modules/$(uname -r) -name "mpls_router.ko" >/dev/null 2>&1; then
+# Check if modules exist (requires root to read /lib/modules)
+if ! sudo find /lib/modules/$(uname -r) -name "mpls_router.ko" >/dev/null 2>&1; then
     echo "[mpls-modules] ERROR: mpls_router module not found"
     echo "[mpls-modules] Kernel may not have MPLS support compiled in"
     exit 1
 fi
 
-# Load modules
+# Load modules (requires root)
 echo "[mpls-modules] Loading mpls_router..."
 sudo modprobe mpls_router || {
     echo "[mpls-modules] ERROR: Failed to load mpls_router"

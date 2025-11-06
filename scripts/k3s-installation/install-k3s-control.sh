@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Install k3s on control node
 # Usage: ./install-k3s-control.sh
+# Note: This script should be run via SSH as a sudo user
 
 set -euo pipefail
 
@@ -9,15 +10,15 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 echo "[k3s-control] Installing k3s on control node..."
 
 # Check if already installed
-if command -v k3s >/dev/null 2>&1; then
+if command -v k3s >/dev/null 2>&1 || sudo command -v k3s >/dev/null 2>&1; then
     echo "[k3s-control] k3s is already installed"
     sudo k3s kubectl get nodes
     exit 0
 fi
 
-# Install k3s
+# Install k3s (requires root/sudo)
 echo "[k3s-control] Downloading and installing k3s..."
-curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--disable traefik --disable servicelb" sh -
+curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--disable traefik --disable servicelb" sudo sh -
 
 # Wait for k3s to be ready
 echo "[k3s-control] Waiting for k3s to be ready..."

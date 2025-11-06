@@ -2,6 +2,7 @@
 # Install k3s on worker node
 # Usage: ./install-k3s-worker.sh <TOKEN> <CONTROL_IP>
 # Example: ./install-k3s-worker.sh K10abc...xyz 10.20.1.100
+# Note: This script should be run via SSH as a sudo user
 
 set -euo pipefail
 
@@ -18,7 +19,7 @@ echo "[k3s-worker] Installing k3s worker node..."
 echo "[k3s-worker] Control node: ${CONTROL_IP}"
 
 # Check if already installed
-if command -v k3s >/dev/null 2>&1; then
+if command -v k3s >/dev/null 2>&1 || sudo command -v k3s >/dev/null 2>&1; then
     echo "[k3s-worker] k3s is already installed"
     sudo k3s kubectl get nodes 2>/dev/null || echo "[k3s-worker] Note: kubectl not available on worker nodes"
     exit 0
@@ -31,9 +32,9 @@ if ! ping -c 1 -W 2 "${CONTROL_IP}" >/dev/null 2>&1; then
     exit 1
 fi
 
-# Install k3s worker
+# Install k3s worker (requires root/sudo)
 echo "[k3s-worker] Downloading and installing k3s worker..."
-curl -sfL https://get.k3s.io | K3S_URL="https://${CONTROL_IP}:6443" K3S_TOKEN="${TOKEN}" sh -
+curl -sfL https://get.k3s.io | K3S_URL="https://${CONTROL_IP}:6443" K3S_TOKEN="${TOKEN}" sudo sh -
 
 # Wait for k3s to be ready
 echo "[k3s-worker] Waiting for k3s agent to start..."

@@ -11,9 +11,31 @@ This guide provides step-by-step instructions and scripts to set up a k3s cluste
 ## Prerequisites
 
 - Ubuntu 22.04+ on all nodes
-- SSH access to all nodes (with sudo privileges)
+- SSH access to all nodes as a regular user (with passwordless sudo)
+- SSH keys configured for passwordless access from your dev machine
+- User has passwordless sudo on all nodes
 - All nodes can reach each other on the network
 - Internet access for downloading k3s and OVN images
+
+### Setting Up Passwordless Sudo
+
+On each node, configure passwordless sudo for your user:
+
+```bash
+# On each node (10.20.1.100, 10.20.1.101, 10.20.1.102)
+echo "$USER ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/$USER
+```
+
+### Setting Up SSH Keys
+
+From your dev machine, copy SSH keys to all nodes:
+
+```bash
+# Replace 'youruser' with your actual username
+ssh-copy-id youruser@10.20.1.100
+ssh-copy-id youruser@10.20.1.101
+ssh-copy-id youruser@10.20.1.102
+```
 
 ## Quick Start
 
