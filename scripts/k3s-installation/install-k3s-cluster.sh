@@ -304,7 +304,9 @@ fi
 
 echo "[k3s-worker] Downloading and installing k3s worker..."
 echo "[k3s-worker] Connecting to: https://\${CONTROL_ENDPOINT}:6443"
-if ! curl -sfL https://get.k3s.io | K3S_URL="https://\${CONTROL_ENDPOINT}:6443" K3S_TOKEN="\${TOKEN}" sudo sh -; then
+# Ensure we're installing as agent (worker) by explicitly setting K3S_URL
+# This tells the installer to create k3s-agent.service, not k3s.service
+if ! curl -sfL https://get.k3s.io | K3S_URL="https://\${CONTROL_ENDPOINT}:6443" K3S_TOKEN="\${TOKEN}" INSTALL_K3S_EXEC="agent" sudo sh -; then
     echo "[k3s-worker] ERROR: k3s worker installation failed"
     sudo journalctl -u k3s-agent --no-pager -n 20 2>/dev/null || true
     exit 1
@@ -312,6 +314,21 @@ fi
 
 # Wait for k3s agent to start (with retries for slower systems)
 echo "[k3s-worker] Waiting for k3s agent to start..."
+# Verify the correct service was created
+if systemctl list-units --type=service 2>/dev/null | grep -q "k3s.service"; then
+    echo "[k3s-worker] ERROR: k3s.service was created instead of k3s-agent.service"
+    echo "[k3s-worker] This indicates the installation failed to create worker service"
+    sudo systemctl status k3s --no-pager -l || true
+    exit 1
+fi
+
+if ! systemctl list-units --type=service 2>/dev/null | grep -q "k3s-agent.service"; then
+    echo "[k3s-worker] ERROR: k3s-agent.service was not created"
+    echo "[k3s-worker] Checking what services exist..."
+    sudo systemctl list-units --type=service | grep k3s || echo "  (no k3s services found)"
+    exit 1
+fi
+
 while ! systemctl is-active --quiet k3s-agent; do
     if [ ${ELAPSED} -ge ${TIMEOUT} ]; then
         echo "[k3s-worker] ERROR: k3s agent did not start within ${TIMEOUT}s"
@@ -433,7 +450,9 @@ fi
 
 echo "[k3s-worker] Downloading and installing k3s worker..."
 echo "[k3s-worker] Connecting to: https://\${CONTROL_ENDPOINT}:6443"
-if ! curl -sfL https://get.k3s.io | K3S_URL="https://\${CONTROL_ENDPOINT}:6443" K3S_TOKEN="\${TOKEN}" sudo sh -; then
+# Ensure we're installing as agent (worker) by explicitly setting K3S_URL
+# This tells the installer to create k3s-agent.service, not k3s.service
+if ! curl -sfL https://get.k3s.io | K3S_URL="https://\${CONTROL_ENDPOINT}:6443" K3S_TOKEN="\${TOKEN}" INSTALL_K3S_EXEC="agent" sudo sh -; then
     echo "[k3s-worker] ERROR: k3s worker installation failed"
     sudo journalctl -u k3s-agent --no-pager -n 20 2>/dev/null || true
     exit 1
@@ -441,6 +460,21 @@ fi
 
 # Wait for k3s agent to start (with retries for slower systems)
 echo "[k3s-worker] Waiting for k3s agent to start..."
+# Verify the correct service was created
+if systemctl list-units --type=service 2>/dev/null | grep -q "k3s.service"; then
+    echo "[k3s-worker] ERROR: k3s.service was created instead of k3s-agent.service"
+    echo "[k3s-worker] This indicates the installation failed to create worker service"
+    sudo systemctl status k3s --no-pager -l || true
+    exit 1
+fi
+
+if ! systemctl list-units --type=service 2>/dev/null | grep -q "k3s-agent.service"; then
+    echo "[k3s-worker] ERROR: k3s-agent.service was not created"
+    echo "[k3s-worker] Checking what services exist..."
+    sudo systemctl list-units --type=service | grep k3s || echo "  (no k3s services found)"
+    exit 1
+fi
+
 while ! systemctl is-active --quiet k3s-agent; do
     if [ ${ELAPSED} -ge ${TIMEOUT} ]; then
         echo "[k3s-worker] ERROR: k3s agent did not start within ${TIMEOUT}s"
