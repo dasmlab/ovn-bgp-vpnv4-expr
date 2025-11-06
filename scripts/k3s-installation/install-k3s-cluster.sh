@@ -328,17 +328,23 @@ ELAPSED=0
 EXPECTED_NODES=3  # 1 control + 2 workers
 
 while true; do
-    NODE_COUNT=$(ssh ${SSH_OPTS} "${SSH_USER}@${CONTROL_NODE}" "sudo k3s kubectl get nodes --no-headers 2>/dev/null | wc -l" || echo "0")
+    # Get node count - filter out empty lines and count actual nodes
+    NODE_COUNT=$(ssh ${SSH_OPTS} "${SSH_USER}@${CONTROL_NODE}" "sudo k3s kubectl get nodes --no-headers 2>/dev/null | grep -v '^$' | wc -l" || echo "0")
+    
+    # Also get node names for debugging
+    NODE_NAMES=$(ssh ${SSH_OPTS} "${SSH_USER}@${CONTROL_NODE}" "sudo k3s kubectl get nodes --no-headers -o name 2>/dev/null | sed 's|node/||' | tr '\n' ' ' || echo ''")
     
     if [ "$NODE_COUNT" -ge "$EXPECTED_NODES" ]; then
         echo "[install] ✓ All ${EXPECTED_NODES} nodes are in the cluster"
+        echo "[install] Nodes: ${NODE_NAMES}"
         break
     fi
     
     if [ ${ELAPSED} -ge ${TIMEOUT} ]; then
         echo "[install] WARNING: Not all nodes joined within ${TIMEOUT}s"
         echo "[install] Current node count: ${NODE_COUNT} (expected: ${EXPECTED_NODES})"
-        echo "[install] Node status:"
+        echo "[install] Nodes found: ${NODE_NAMES}"
+        echo "[install] Full node status:"
         ssh ${SSH_OPTS} "${SSH_USER}@${CONTROL_NODE}" "sudo k3s kubectl get nodes" || true
         # Don't exit - continue to show status
         break
@@ -348,6 +354,9 @@ while true; do
     ELAPSED=$((ELAPSED + 5))
     if [ $((ELAPSED % 15)) -eq 0 ]; then
         echo "[install] Waiting for workers to join... (${ELAPSED}s elapsed, ${NODE_COUNT}/${EXPECTED_NODES} nodes)"
+        if [ -n "$NODE_NAMES" ]; then
+            echo "[install] Current nodes: ${NODE_NAMES}"
+        fi
     fi
 done
 
