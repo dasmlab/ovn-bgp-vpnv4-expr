@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Prepare all nodes (hostname, hosts file, prerequisites)
-# Usage: ./prepare-nodes.sh
+# Usage: ./prepare-nodes.sh [--user USER]
+#
+# Environment variables:
+# - SSH_USER: SSH user (default: root)
 
 set -euo pipefail
 
@@ -13,6 +16,23 @@ WORKER1_HOST="k3s-worker-1"
 WORKER2_NODE="10.20.1.102"
 WORKER2_HOST="k3s-worker-2"
 
+SSH_USER="${SSH_USER:-root}"
+SSH_OPTS="${SSH_OPTS:--o StrictHostKeyChecking=no -o ConnectTimeout=10}"
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --user)
+            SSH_USER="$2"
+            shift 2
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Usage: $0 [--user USER]"
+            exit 1
+            ;;
+    esac
+done
+
 echo "[prepare] Preparing all nodes..."
 echo ""
 
@@ -23,7 +43,7 @@ prepare_node() {
     
     echo "[prepare] Preparing ${hostname} (${node_ip})..."
     
-    ssh "root@${node_ip}" bash <<EOF
+    ssh ${SSH_OPTS} "${SSH_USER}@${node_ip}" bash <<EOF
 set -euo pipefail
 
 # Update system

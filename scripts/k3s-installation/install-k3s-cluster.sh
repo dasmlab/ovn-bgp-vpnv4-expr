@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Master script to install k3s cluster with 1 control + 2 workers
-# Usage: ./install-k3s-cluster.sh [--skip-mpls] [--skip-verify]
+# Usage: ./install-k3s-cluster.sh [--skip-mpls] [--skip-verify] [--user USER]
 #
 # Prerequisites:
 # - SSH access to all nodes with sudo privileges
@@ -8,6 +8,10 @@
 # - Control node: 10.20.1.100 (k3s-control)
 # - Worker 1: 10.20.1.101 (k3s-worker-1)
 # - Worker 2: 10.20.1.102 (k3s-worker-2)
+#
+# Environment variables:
+# - SSH_USER: SSH user (default: root)
+# - SSH_OPTS: Additional SSH options
 
 set -euo pipefail
 
@@ -24,6 +28,8 @@ WORKER2_HOST="k3s-worker-2"
 # Options
 SKIP_MPLS=false
 SKIP_VERIFY=false
+SSH_USER="${SSH_USER:-root}"
+SSH_OPTS="${SSH_OPTS:--o StrictHostKeyChecking=no -o ConnectTimeout=10}"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -35,9 +41,13 @@ while [[ $# -gt 0 ]]; do
             SKIP_VERIFY=true
             shift
             ;;
+        --user)
+            SSH_USER="$2"
+            shift 2
+            ;;
         *)
             echo "Unknown option: $1"
-            echo "Usage: $0 [--skip-mpls] [--skip-verify]"
+            echo "Usage: $0 [--skip-mpls] [--skip-verify] [--user USER]"
             exit 1
             ;;
     esac
@@ -54,36 +64,39 @@ echo ""
 
 # Check SSH access
 echo "[install] Checking SSH access to nodes..."
+echo "[install] Using SSH user: ${SSH_USER}"
 for node in "${CONTROL_NODE}" "${WORKER1_NODE}" "${WORKER2_NODE}"; do
-    if ! ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no "root@${node}" "echo 'SSH OK'" >/dev/null 2>&1; then
-        echo "[install] ERROR: Cannot SSH to ${node}"
+    if ! ssh ${SSH_OPTS} "${SSH_USER}@${node}" "echo 'SSH OK'" >/dev/null 2>&1; then
+        echo "[install] ERROR: Cannot SSH to ${SSH_USER}@${node}"
         echo "[install] Please ensure:"
-        echo "  - SSH keys are configured"
+        echo "  - SSH keys are configured (or use --user with password auth)"
         echo "  - User has sudo privileges"
         echo "  - Nodes are reachable"
+        echo ""
+        echo "[install] Try: ssh ${SSH_USER}@${node} 'echo test'"
         exit 1
     fi
-    echo "[install] ✓ SSH access to ${node}"
+    echo "[install] ✓ SSH access to ${SSH_USER}@${node}"
 done
 echo ""
 
 # Step 1: Install on control node
 echo "[install] Step 1/5: Installing k3s on control node..."
-ssh "root@${CONTROL_NODE}" "bash -s" < "${SCRIPT_DIR}/install-k3s-control.sh"
+ssh ${SSH_OPTS} "${SSH_USER}@${CONTROL_NODE}" "bash -s" < "${SCRIPT_DIR}/install-k3s-control.sh"
 
 # Get join token
 echo "[install] Step 2/5: Getting join token..."
-JOIN_TOKEN=$(ssh "root@${CONTROL_NODE}" "sudo cat /var/lib/rancher/k3s/server/node-token")
+JOIN_TOKEN=$(ssh ${SSH_OPTS} "${SSH_USER}@${CONTROL_NODE}" "sudo cat /var/lib/rancher/k3s/server/node-token")
 echo "[install] Join token: ${JOIN_TOKEN:0:20}..."
 echo ""
 
 # Step 3: Install on worker nodes
 echo "[install] Step 3/5: Installing k3s on worker nodes..."
 echo "[install] Installing on ${WORKER1_HOST}..."
-ssh "root@${WORKER1_NODE}" "bash -s" < "${SCRIPT_DIR}/install-k3s-worker.sh" -- "${JOIN_TOKEN}" "${CONTROL_NODE}"
+ssh ${SSH_OPTS} "${SSH_USER}@${WORKER1_NODE}" "bash -s" < "${SCRIPT_DIR}/install-k3s-worker.sh" -- "${JOIN_TOKEN}" "${CONTROL_NODE}"
 
 echo "[install] Installing on ${WORKER2_HOST}..."
-ssh "root@${WORKER2_NODE}" "bash -s" < "${SCRIPT_DIR}/install-k3s-worker.sh" -- "${JOIN_TOKEN}" "${CONTROL_NODE}"
+ssh ${SSH_OPTS} "${SSH_USER}@${WORKER2_NODE}" "bash -s" < "${SCRIPT_DIR}/install-k3s-worker.sh" -- "${JOIN_TOKEN}" "${CONTROL_NODE}"
 
 # Wait for workers to join
 echo "[install] Waiting for workers to join cluster..."
@@ -94,7 +107,7 @@ if [ "$SKIP_MPLS" = false ]; then
     echo "[install] Step 4/5: Loading MPLS modules on all nodes..."
     for node in "${CONTROL_NODE}" "${WORKER1_NODE}" "${WORKER2_NODE}"; do
         echo "[install] Loading MPLS modules on ${node}..."
-        ssh "root@${node}" "bash -s" < "${SCRIPT_DIR}/load-mpls-modules.sh" || {
+        ssh ${SSH_OPTS} "${SSH_USER}@${node}" "bash -s" < "${SCRIPT_DIR}/load-mpls-modules.sh" || {
             echo "[install] WARNING: Failed to load MPLS modules on ${node}"
         }
     done
@@ -109,7 +122,7 @@ if [ "$SKIP_VERIFY" = false ]; then
     
     # Get kubeconfig
     echo "[install] Fetching kubeconfig..."
-    ssh "root@${CONTROL_NODE}" "sudo cat /etc/rancher/k3s/k3s.yaml" | \
+    ssh ${SSH_OPTS} "${SSH_USER}@${CONTROL_NODE}" "sudo cat /etc/rancher/k3s/k3s.yaml" | \
         sed "s/127.0.0.1/${CONTROL_NODE}/g" > /tmp/k3s-kubeconfig.yaml
     
     # Verify
@@ -129,7 +142,7 @@ echo "=========================================="
 echo ""
 echo "Next steps:"
 echo "1. Copy kubeconfig:"
-echo "   scp root@${CONTROL_NODE}:/etc/rancher/k3s/k3s.yaml ~/.kube/config"
+echo "   scp ${SSH_USER}@${CONTROL_NODE}:/etc/rancher/k3s/k3s.yaml ~/.kube/config"
 echo "   # Update server address to: https://${CONTROL_NODE}:6443"
 echo ""
 echo "2. Verify cluster:"
