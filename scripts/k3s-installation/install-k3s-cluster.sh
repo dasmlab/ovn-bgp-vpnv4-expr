@@ -217,9 +217,45 @@ if ! ping -c 1 -W 2 "\${CONTROL_IP}" >/dev/null 2>&1; then
     exit 1
 fi
 
+# Verify DNS resolution of control node hostname
+echo "[k3s-worker] Verifying DNS resolution of control node hostname..."
+CONTROL_HOSTNAME="k3s-control"
+if ! getent hosts "\${CONTROL_HOSTNAME}" >/dev/null 2>&1; then
+    echo "[k3s-worker] WARNING: Cannot resolve control node hostname \${CONTROL_HOSTNAME}"
+    echo "[k3s-worker] Checking /etc/hosts..."
+    if ! grep -q "\${CONTROL_HOSTNAME}" /etc/hosts; then
+        echo "[k3s-worker] ERROR: Control node hostname not in /etc/hosts"
+        echo "[k3s-worker] Adding to /etc/hosts..."
+        echo "\${CONTROL_IP} \${CONTROL_HOSTNAME}" | sudo tee -a /etc/hosts >/dev/null
+    fi
+    # Verify again
+    if ! getent hosts "\${CONTROL_HOSTNAME}" >/dev/null 2>&1; then
+        echo "[k3s-worker] ERROR: Still cannot resolve \${CONTROL_HOSTNAME} after adding to /etc/hosts"
+        exit 1
+    fi
+fi
+CONTROL_RESOLVED=$(getent hosts "\${CONTROL_HOSTNAME}" | awk '{print $1}')
+echo "[k3s-worker] Control node hostname resolves to: \${CONTROL_RESOLVED}"
+
+# Verify we can reach control node by hostname
+if ! ping -c 1 -W 2 "\${CONTROL_HOSTNAME}" >/dev/null 2>&1; then
+    echo "[k3s-worker] WARNING: Cannot ping control node by hostname, but IP works"
+    echo "[k3s-worker] Will use IP address for connection"
+fi
+
 # Install k3s worker (requires root/sudo)
+# Use control node hostname if resolvable, otherwise use IP
+if getent hosts "\${CONTROL_HOSTNAME}" >/dev/null 2>&1; then
+    CONTROL_ENDPOINT="\${CONTROL_HOSTNAME}"
+    echo "[k3s-worker] Using control node hostname: \${CONTROL_ENDPOINT}"
+else
+    CONTROL_ENDPOINT="\${CONTROL_IP}"
+    echo "[k3s-worker] Using control node IP: \${CONTROL_ENDPOINT}"
+fi
+
 echo "[k3s-worker] Downloading and installing k3s worker..."
-if ! curl -sfL https://get.k3s.io | K3S_URL="https://\${CONTROL_IP}:6443" K3S_TOKEN="\${TOKEN}" sudo sh -; then
+echo "[k3s-worker] Connecting to: https://\${CONTROL_ENDPOINT}:6443"
+if ! curl -sfL https://get.k3s.io | K3S_URL="https://\${CONTROL_ENDPOINT}:6443" K3S_TOKEN="\${TOKEN}" sudo sh -; then
     echo "[k3s-worker] ERROR: k3s worker installation failed"
     sudo journalctl -u k3s-agent --no-pager -n 20 2>/dev/null || true
     exit 1
@@ -282,9 +318,45 @@ if ! ping -c 1 -W 2 "\${CONTROL_IP}" >/dev/null 2>&1; then
     exit 1
 fi
 
+# Verify DNS resolution of control node hostname
+echo "[k3s-worker] Verifying DNS resolution of control node hostname..."
+CONTROL_HOSTNAME="k3s-control"
+if ! getent hosts "\${CONTROL_HOSTNAME}" >/dev/null 2>&1; then
+    echo "[k3s-worker] WARNING: Cannot resolve control node hostname \${CONTROL_HOSTNAME}"
+    echo "[k3s-worker] Checking /etc/hosts..."
+    if ! grep -q "\${CONTROL_HOSTNAME}" /etc/hosts; then
+        echo "[k3s-worker] ERROR: Control node hostname not in /etc/hosts"
+        echo "[k3s-worker] Adding to /etc/hosts..."
+        echo "\${CONTROL_IP} \${CONTROL_HOSTNAME}" | sudo tee -a /etc/hosts >/dev/null
+    fi
+    # Verify again
+    if ! getent hosts "\${CONTROL_HOSTNAME}" >/dev/null 2>&1; then
+        echo "[k3s-worker] ERROR: Still cannot resolve \${CONTROL_HOSTNAME} after adding to /etc/hosts"
+        exit 1
+    fi
+fi
+CONTROL_RESOLVED=$(getent hosts "\${CONTROL_HOSTNAME}" | awk '{print $1}')
+echo "[k3s-worker] Control node hostname resolves to: \${CONTROL_RESOLVED}"
+
+# Verify we can reach control node by hostname
+if ! ping -c 1 -W 2 "\${CONTROL_HOSTNAME}" >/dev/null 2>&1; then
+    echo "[k3s-worker] WARNING: Cannot ping control node by hostname, but IP works"
+    echo "[k3s-worker] Will use IP address for connection"
+fi
+
 # Install k3s worker (requires root/sudo)
+# Use control node hostname if resolvable, otherwise use IP
+if getent hosts "\${CONTROL_HOSTNAME}" >/dev/null 2>&1; then
+    CONTROL_ENDPOINT="\${CONTROL_HOSTNAME}"
+    echo "[k3s-worker] Using control node hostname: \${CONTROL_ENDPOINT}"
+else
+    CONTROL_ENDPOINT="\${CONTROL_IP}"
+    echo "[k3s-worker] Using control node IP: \${CONTROL_ENDPOINT}"
+fi
+
 echo "[k3s-worker] Downloading and installing k3s worker..."
-if ! curl -sfL https://get.k3s.io | K3S_URL="https://\${CONTROL_IP}:6443" K3S_TOKEN="\${TOKEN}" sudo sh -; then
+echo "[k3s-worker] Connecting to: https://\${CONTROL_ENDPOINT}:6443"
+if ! curl -sfL https://get.k3s.io | K3S_URL="https://\${CONTROL_ENDPOINT}:6443" K3S_TOKEN="\${TOKEN}" sudo sh -; then
     echo "[k3s-worker] ERROR: k3s worker installation failed"
     sudo journalctl -u k3s-agent --no-pager -n 20 2>/dev/null || true
     exit 1
