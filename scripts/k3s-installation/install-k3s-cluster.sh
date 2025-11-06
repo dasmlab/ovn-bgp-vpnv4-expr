@@ -272,8 +272,20 @@ if command -v k3s >/dev/null 2>&1 || sudo command -v k3s >/dev/null 2>&1; then
     fi
 fi
 
-# Clean up any leftover k3s processes that might be holding ports
-echo "[k3s-worker] Checking for leftover k3s processes..."
+# Clean up any leftover k3s processes and services that might be holding ports
+echo "[k3s-worker] Checking for leftover k3s processes and services..."
+
+# Stop any existing k3s services
+if systemctl is-active --quiet k3s 2>/dev/null; then
+    echo "[k3s-worker] Stopping k3s.service..."
+    sudo systemctl stop k3s 2>/dev/null || true
+fi
+if systemctl is-active --quiet k3s-agent 2>/dev/null; then
+    echo "[k3s-worker] Stopping k3s-agent.service..."
+    sudo systemctl stop k3s-agent 2>/dev/null || true
+fi
+
+# Kill any running k3s processes
 if pgrep -f k3s >/dev/null 2>&1; then
     echo "[k3s-worker] Found running k3s processes, stopping them..."
     sudo pkill -9 -f k3s || true
@@ -450,8 +462,20 @@ if command -v k3s >/dev/null 2>&1 || sudo command -v k3s >/dev/null 2>&1; then
     fi
 fi
 
-# Clean up any leftover k3s processes that might be holding ports
-echo "[k3s-worker] Checking for leftover k3s processes..."
+# Clean up any leftover k3s processes and services that might be holding ports
+echo "[k3s-worker] Checking for leftover k3s processes and services..."
+
+# Stop any existing k3s services
+if systemctl is-active --quiet k3s 2>/dev/null; then
+    echo "[k3s-worker] Stopping k3s.service..."
+    sudo systemctl stop k3s 2>/dev/null || true
+fi
+if systemctl is-active --quiet k3s-agent 2>/dev/null; then
+    echo "[k3s-worker] Stopping k3s-agent.service..."
+    sudo systemctl stop k3s-agent 2>/dev/null || true
+fi
+
+# Kill any running k3s processes
 if pgrep -f k3s >/dev/null 2>&1; then
     echo "[k3s-worker] Found running k3s processes, stopping them..."
     sudo pkill -9 -f k3s || true
