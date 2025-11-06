@@ -206,8 +206,21 @@ echo "[k3s-worker] Control node: \${CONTROL_IP}"
 # Check if already installed
 if command -v k3s >/dev/null 2>&1 || sudo command -v k3s >/dev/null 2>&1; then
     echo "[k3s-worker] k3s is already installed"
-    sudo k3s kubectl get nodes 2>/dev/null || echo "[k3s-worker] Note: kubectl not available on worker nodes"
-    exit 0
+    # Check if agent is running and can reach control node
+    if systemctl is-active --quiet k3s-agent 2>/dev/null; then
+        echo "[k3s-worker] k3s-agent is running"
+        # Try to verify it's connected to the cluster
+        if sudo k3s kubectl get nodes 2>/dev/null | grep -q "$(hostname)"; then
+            echo "[k3s-worker] Node appears to be joined to cluster"
+            exit 0
+        else
+            echo "[k3s-worker] WARNING: k3s-agent running but node not in cluster"
+            echo "[k3s-worker] Will attempt to rejoin..."
+        fi
+    else
+        echo "[k3s-worker] k3s installed but agent not running"
+        echo "[k3s-worker] Will attempt to start/join..."
+    fi
 fi
 
 # Verify connectivity to control node
@@ -307,8 +320,21 @@ echo "[k3s-worker] Control node: \${CONTROL_IP}"
 # Check if already installed
 if command -v k3s >/dev/null 2>&1 || sudo command -v k3s >/dev/null 2>&1; then
     echo "[k3s-worker] k3s is already installed"
-    sudo k3s kubectl get nodes 2>/dev/null || echo "[k3s-worker] Note: kubectl not available on worker nodes"
-    exit 0
+    # Check if agent is running and can reach control node
+    if systemctl is-active --quiet k3s-agent 2>/dev/null; then
+        echo "[k3s-worker] k3s-agent is running"
+        # Try to verify it's connected to the cluster
+        if sudo k3s kubectl get nodes 2>/dev/null | grep -q "$(hostname)"; then
+            echo "[k3s-worker] Node appears to be joined to cluster"
+            exit 0
+        else
+            echo "[k3s-worker] WARNING: k3s-agent running but node not in cluster"
+            echo "[k3s-worker] Will attempt to rejoin..."
+        fi
+    else
+        echo "[k3s-worker] k3s installed but agent not running"
+        echo "[k3s-worker] Will attempt to start/join..."
+    fi
 fi
 
 # Verify connectivity to control node
