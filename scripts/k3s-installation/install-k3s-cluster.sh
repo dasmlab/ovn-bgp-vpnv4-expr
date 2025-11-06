@@ -359,7 +359,8 @@ set -eo pipefail
 echo "[mpls-modules] Loading MPLS kernel modules..."
 
 # Check kernel version
-KERNEL_VERSION=$(uname -r | cut -d. -f1,2)
+KERNEL_VERSION_FULL=$(uname -r)
+KERNEL_VERSION=$(echo ${KERNEL_VERSION_FULL} | cut -d. -f1,2)
 REQUIRED_VERSION="5.15"
 
 if [ "$(printf '%s\n' "$REQUIRED_VERSION" "$KERNEL_VERSION" | sort -V | head -n1)" != "$REQUIRED_VERSION" ]; then
@@ -367,38 +368,63 @@ if [ "$(printf '%s\n' "$REQUIRED_VERSION" "$KERNEL_VERSION" | sort -V | head -n1
     echo "[mpls-modules] Recommended: kernel 5.15+"
 fi
 
-# Check if modules exist (requires root to read /lib/modules)
-if ! sudo find /lib/modules/$(uname -r) -name "mpls_router.ko" >/dev/null 2>&1; then
-    echo "[mpls-modules] ERROR: mpls_router module not found"
-    echo "[mpls-modules] Kernel may not have MPLS support compiled in"
-    exit 1
+# Check if modules exist
+echo "[mpls-modules] Checking for MPLS modules in kernel ${KERNEL_VERSION_FULL}..."
+MPLS_ROUTER_MODULE=$(sudo find /lib/modules/${KERNEL_VERSION_FULL} -name "mpls_router.ko*" 2>/dev/null | head -1)
+MPLS_IPTUNNEL_MODULE=$(sudo find /lib/modules/${KERNEL_VERSION_FULL} -name "mpls_iptunnel.ko*" 2>/dev/null | head -1)
+
+if [ -z "$MPLS_ROUTER_MODULE" ]; then
+    echo "[mpls-modules] WARNING: mpls_router module not found"
+    echo "[mpls-modules] Checking if MPLS is built into kernel..."
+    if grep -q "CONFIG_MPLS=y" /boot/config-${KERNEL_VERSION_FULL} 2>/dev/null || \
+       grep -q "CONFIG_MPLS_ROUTING=y" /boot/config-${KERNEL_VERSION_FULL} 2>/dev/null; then
+        echo "[mpls-modules] MPLS appears to be built into kernel (not a module)"
+        echo "[mpls-modules] Attempting to load anyway..."
+    else
+        echo "[mpls-modules] ERROR: MPLS support not found in kernel"
+        echo "[mpls-modules] This is non-fatal but MPLS features will not work"
+        exit 1
+    fi
+else
+    echo "[mpls-modules] Found mpls_router module: ${MPLS_ROUTER_MODULE}"
 fi
 
 # Load modules (requires root)
 echo "[mpls-modules] Loading mpls_router..."
-sudo modprobe mpls_router || {
-    echo "[mpls-modules] ERROR: Failed to load mpls_router"
+MPLS_ROUTER_ERROR=$(sudo modprobe mpls_router 2>&1) || {
+    MPLS_ROUTER_EXIT=$?
+    echo "[mpls-modules] ERROR: Failed to load mpls_router (exit code: ${MPLS_ROUTER_EXIT})"
+    echo "[mpls-modules] Error output: ${MPLS_ROUTER_ERROR}"
+    echo "[mpls-modules] This is non-fatal but MPLS features will not work"
     exit 1
 }
 
 echo "[mpls-modules] Loading mpls_iptunnel..."
-sudo modprobe mpls_iptunnel || {
-    echo "[mpls-modules] ERROR: Failed to load mpls_iptunnel"
+MPLS_IPTUNNEL_ERROR=$(sudo modprobe mpls_iptunnel 2>&1) || {
+    MPLS_IPTUNNEL_EXIT=$?
+    echo "[mpls-modules] ERROR: Failed to load mpls_iptunnel (exit code: ${MPLS_IPTUNNEL_EXIT})"
+    echo "[mpls-modules] Error output: ${MPLS_IPTUNNEL_ERROR}"
+    echo "[mpls-modules] This is non-fatal but MPLS features will not work"
     exit 1
 }
+
+# Give modules a moment to register
+sleep 1
 
 # Verify modules are loaded
 if lsmod | grep -q "^mpls_router"; then
     echo "[mpls-modules] ✓ mpls_router loaded"
 else
-    echo "[mpls-modules] ERROR: mpls_router not loaded"
+    echo "[mpls-modules] ERROR: mpls_router modprobe succeeded but module not in lsmod"
+    echo "[mpls-modules] Checking module status..."
+    lsmod | grep mpls || echo "  (no MPLS modules found)"
     exit 1
 fi
 
 if lsmod | grep -q "^mpls_iptunnel"; then
     echo "[mpls-modules] ✓ mpls_iptunnel loaded"
 else
-    echo "[mpls-modules] ERROR: mpls_iptunnel not loaded"
+    echo "[mpls-modules] ERROR: mpls_iptunnel modprobe succeeded but module not in lsmod"
     exit 1
 fi
 
@@ -419,6 +445,7 @@ echo "[mpls-modules] MPLS modules loaded successfully!"
 lsmod | grep mpls
 EOF
             echo "[install] WARNING: Failed to load MPLS modules on ${node}"
+            echo "[install] This is non-fatal - cluster will work but MPLS features may not be available"
         }
     done
 else
