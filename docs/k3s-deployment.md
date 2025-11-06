@@ -8,10 +8,33 @@ This guide walks through deploying the VPNv4 driver on a k3s cluster with OVN-Ku
 - Access to FortiGate peers (or GoBGP simulator)
 - Root/privileged access to nodes
 
+### Setting Up k3s Cluster
+
+If you need to set up a k3s cluster from scratch, see the [k3s Installation Guide](../../scripts/k3s-installation/README.md).
+
+**Quick start:**
+```bash
+cd scripts/k3s-installation
+./prepare-nodes.sh        # Prepare all nodes (hostname, prerequisites)
+./install-k3s-cluster.sh  # Install k3s on all nodes
+```
+
+This will set up:
+- Control node: `k3s-control` (10.20.1.100)
+- Worker 1: `k3s-worker-1` (10.20.1.101)
+- Worker 2: `k3s-worker-2` (10.20.1.102)
+
 ## Step 1: Load Kernel Modules
 
 On each k3s node, load the required MPLS modules:
 
+**Option 1: Use the provided script (recommended)**
+```bash
+# From scripts/k3s-installation directory
+./load-mpls-modules.sh
+```
+
+**Option 2: Manual installation**
 ```bash
 # Load modules immediately
 sudo modprobe mpls_router mpls_iptunnel
@@ -26,28 +49,10 @@ EOF
 lsmod | grep mpls
 ```
 
-Alternatively, use the systemd unit approach:
-
+**Option 3: Systemd unit (if using deploy/k3s/00-mpls-modules.yaml)**
 ```bash
-# Create systemd service
-sudo tee /etc/systemd/system/mpls-modules.service <<EOF
-[Unit]
-Description=Load MPLS modules for VPNv4 driver
-After=network.target
-
-[Service]
-Type=oneshot
-ExecStart=/usr/sbin/modprobe mpls_router
-ExecStart=/usr/sbin/modprobe mpls_iptunnel
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# Enable and start
-sudo systemctl enable mpls-modules.service
-sudo systemctl start mpls-modules.service
+# Apply the systemd unit manifest
+kubectl apply -f deploy/k3s/00-mpls-modules.yaml
 ```
 
 ## Step 2: Verify OVN-Kubernetes
@@ -68,9 +73,17 @@ kubectl run -it --rm debug --image=ghcr.io/dasmlab/ovn-daemonset-fedora:dev --re
 
 Edit `deploy/k3s/vpnv4-agent.yaml` and update:
 
-1. **FortiGate peer IPs:** Update `neighbours[].address` with your FortiGate IPs
-2. **ASN configuration:** Adjust `local_asn`, `rd_base`, `rt_base` as needed
-3. **OVN connection:** Update `watchers[].options.connection` if OVN NB DB is not on localhost
+1. **Image:** Update `image:` field to your built image (or use pre-built from GHCR)
+2. **FortiGate peer IPs:** Update `neighbours[].address` with your FortiGate IPs
+3. **ASN configuration:** Adjust `local_asn`, `rd_base`, `rt_base` as needed
+4. **OVN connection:** Update `watchers[].options.connection` if OVN NB DB is not on localhost
+
+**Example configuration:**
+```yaml
+image: ghcr.io/dasmlab/vpnv4-agent:vpnv4-dev
+# ... or build locally:
+# image: ghcr.io/your-org/vpnv4-agent:vpnv4-dev
+```
 
 ## Step 4: Deploy Agent
 
