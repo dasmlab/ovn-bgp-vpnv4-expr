@@ -228,8 +228,6 @@ fi
 
 # Wait for k3s agent to start (with retries for slower systems)
 echo "[k3s-worker] Waiting for k3s agent to start..."
-TIMEOUT=120
-ELAPSED=0
 while ! systemctl is-active --quiet k3s-agent; do
     if [ ${ELAPSED} -ge ${TIMEOUT} ]; then
         echo "[k3s-worker] ERROR: k3s agent did not start within ${TIMEOUT}s"
@@ -296,8 +294,6 @@ fi
 
 # Wait for k3s agent to start (with retries for slower systems)
 echo "[k3s-worker] Waiting for k3s agent to start..."
-TIMEOUT=120
-ELAPSED=0
 while ! systemctl is-active --quiet k3s-agent; do
     if [ ${ELAPSED} -ge ${TIMEOUT} ]; then
         echo "[k3s-worker] ERROR: k3s agent did not start within ${TIMEOUT}s"
