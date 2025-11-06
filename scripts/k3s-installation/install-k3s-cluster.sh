@@ -229,15 +229,23 @@ if command -v k3s >/dev/null 2>&1 || sudo command -v k3s >/dev/null 2>&1; then
     echo "[k3s-worker] k3s binary found"
     
     # Check if this is a control node installation (wrong for workers)
-    if systemctl list-units --type=service --state=active 2>/dev/null | grep -q "k3s.service"; then
+    # Check for k3s.service (control) - check all services, not just active
+    if systemctl list-units --type=service --all 2>/dev/null | grep -q "k3s.service"; then
         echo "[k3s-worker] ERROR: This node has k3s.service (control node) installed, not k3s-agent"
         echo "[k3s-worker] This node should be a worker, not a control node"
         echo "[k3s-worker] Uninstalling control node installation..."
-        sudo /usr/local/bin/k3s-uninstall.sh 2>/dev/null || {
-            echo "[k3s-worker] Manual cleanup may be needed"
-            sudo systemctl stop k3s 2>/dev/null || true
-            sudo systemctl disable k3s 2>/dev/null || true
-        }
+        # Stop and disable service first
+        sudo systemctl stop k3s 2>/dev/null || true
+        sudo systemctl disable k3s 2>/dev/null || true
+        # Run uninstall script if it exists
+        if [ -f /usr/local/bin/k3s-uninstall.sh ]; then
+            sudo /usr/local/bin/k3s-uninstall.sh 2>/dev/null || true
+        fi
+        # Clean up any remaining files
+        sudo rm -f /etc/systemd/system/k3s.service
+        sudo rm -f /etc/systemd/system/k3s.service.env
+        sudo rm -rf /var/lib/rancher/k3s/server 2>/dev/null || true
+        sudo systemctl daemon-reload
         echo "[k3s-worker] Control node installation removed, will install as worker..."
     # Check if agent is running
     elif systemctl is-active --quiet k3s-agent 2>/dev/null; then
@@ -375,15 +383,23 @@ if command -v k3s >/dev/null 2>&1 || sudo command -v k3s >/dev/null 2>&1; then
     echo "[k3s-worker] k3s binary found"
     
     # Check if this is a control node installation (wrong for workers)
-    if systemctl list-units --type=service --state=active 2>/dev/null | grep -q "k3s.service"; then
+    # Check for k3s.service (control) - check all services, not just active
+    if systemctl list-units --type=service --all 2>/dev/null | grep -q "k3s.service"; then
         echo "[k3s-worker] ERROR: This node has k3s.service (control node) installed, not k3s-agent"
         echo "[k3s-worker] This node should be a worker, not a control node"
         echo "[k3s-worker] Uninstalling control node installation..."
-        sudo /usr/local/bin/k3s-uninstall.sh 2>/dev/null || {
-            echo "[k3s-worker] Manual cleanup may be needed"
-            sudo systemctl stop k3s 2>/dev/null || true
-            sudo systemctl disable k3s 2>/dev/null || true
-        }
+        # Stop and disable service first
+        sudo systemctl stop k3s 2>/dev/null || true
+        sudo systemctl disable k3s 2>/dev/null || true
+        # Run uninstall script if it exists
+        if [ -f /usr/local/bin/k3s-uninstall.sh ]; then
+            sudo /usr/local/bin/k3s-uninstall.sh 2>/dev/null || true
+        fi
+        # Clean up any remaining files
+        sudo rm -f /etc/systemd/system/k3s.service
+        sudo rm -f /etc/systemd/system/k3s.service.env
+        sudo rm -rf /var/lib/rancher/k3s/server 2>/dev/null || true
+        sudo systemctl daemon-reload
         echo "[k3s-worker] Control node installation removed, will install as worker..."
     # Check if agent is running
     elif systemctl is-active --quiet k3s-agent 2>/dev/null; then
