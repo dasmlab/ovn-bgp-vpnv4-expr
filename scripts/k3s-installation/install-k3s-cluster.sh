@@ -328,11 +328,19 @@ ELAPSED=0
 EXPECTED_NODES=3  # 1 control + 2 workers
 
 while true; do
-    # Get node count - filter out empty lines and count actual nodes
-    NODE_COUNT=$(ssh ${SSH_OPTS} "${SSH_USER}@${CONTROL_NODE}" "sudo k3s kubectl get nodes --no-headers 2>/dev/null | grep -v '^$' | wc -l" || echo "0")
+    # Get node count - use a more reliable method
+    # First get the raw output to debug
+    NODES_OUTPUT=$(ssh ${SSH_OPTS} "${SSH_USER}@${CONTROL_NODE}" "sudo k3s kubectl get nodes --no-headers 2>/dev/null" || echo "")
     
-    # Also get node names for debugging
-    NODE_NAMES=$(ssh ${SSH_OPTS} "${SSH_USER}@${CONTROL_NODE}" "sudo k3s kubectl get nodes --no-headers -o name 2>/dev/null | sed 's|node/||' | tr '\n' ' ' || echo ''")
+    # Count non-empty lines
+    if [ -z "$NODES_OUTPUT" ]; then
+        NODE_COUNT=0
+        NODE_NAMES=""
+    else
+        NODE_COUNT=$(echo "$NODES_OUTPUT" | grep -v '^[[:space:]]*$' | wc -l)
+        # Get node names for debugging
+        NODE_NAMES=$(ssh ${SSH_OPTS} "${SSH_USER}@${CONTROL_NODE}" "sudo k3s kubectl get nodes --no-headers -o custom-columns=NAME:.metadata.name 2>/dev/null | grep -v '^[[:space:]]*$' | tr '\n' ' ' || echo '')
+    fi
     
     if [ "$NODE_COUNT" -ge "$EXPECTED_NODES" ]; then
         echo "[install] ✓ All ${EXPECTED_NODES} nodes are in the cluster"
