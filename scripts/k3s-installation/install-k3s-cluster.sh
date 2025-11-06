@@ -93,6 +93,27 @@ for node in "${CONTROL_NODE}" "${WORKER1_NODE}" "${WORKER2_NODE}"; do
 done
 echo ""
 
+# Verify DNS resolution on all nodes
+echo "[install] Verifying DNS resolution on all nodes..."
+for node in "${CONTROL_NODE}" "${WORKER1_NODE}" "${WORKER2_NODE}"; do
+    echo "[install] Checking DNS on ${node}..."
+    # Try getent hosts first (uses system resolver, no extra packages needed)
+    if ssh ${SSH_OPTS} "${SSH_USER}@${node}" "getent hosts www.google.com >/dev/null 2>&1"; then
+        echo "[install] ✓ DNS resolution working on ${node}"
+    else
+        # Fallback to ping (usually available, but might be blocked by firewall)
+        if ssh ${SSH_OPTS} "${SSH_USER}@${node}" "ping -c 1 -W 2 www.google.com >/dev/null 2>&1"; then
+            echo "[install] ✓ DNS resolution working on ${node} (via ping)"
+        else
+            echo "[install] ERROR: DNS resolution failed on ${node}"
+            echo "[install] Please check /etc/resolv.conf and ensure DNS servers are configured"
+            echo "[install] Test manually: ssh ${SSH_USER}@${node} 'getent hosts www.google.com'"
+            exit 1
+        fi
+    fi
+done
+echo ""
+
 # Step 1: Install on control node
 echo "[install] Step 1/5: Installing k3s on control node..."
 # Use bash with set -u disabled for BASH_SOURCE to avoid unbound variable error when piping

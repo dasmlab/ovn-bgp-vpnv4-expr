@@ -48,6 +48,27 @@ for node_ip in "${CONTROL_NODE}" "${WORKER1_NODE}" "${WORKER2_NODE}"; do
 done
 echo ""
 
+# Verify DNS resolution on all nodes
+echo "[prepare] Verifying DNS resolution on all nodes..."
+for node_ip in "${CONTROL_NODE}" "${WORKER1_NODE}" "${WORKER2_NODE}"; do
+    echo "[prepare] Checking DNS on ${node_ip}..."
+    # Try getent hosts first (uses system resolver, no extra packages needed)
+    if ssh ${SSH_OPTS} "${SSH_USER}@${node_ip}" "getent hosts www.google.com >/dev/null 2>&1"; then
+        echo "[prepare] ✓ DNS resolution working on ${node_ip}"
+    else
+        # Fallback to ping (usually available, but might be blocked by firewall)
+        if ssh ${SSH_OPTS} "${SSH_USER}@${node_ip}" "ping -c 1 -W 2 www.google.com >/dev/null 2>&1"; then
+            echo "[prepare] ✓ DNS resolution working on ${node_ip} (via ping)"
+        else
+            echo "[prepare] ERROR: DNS resolution failed on ${node_ip}"
+            echo "[prepare] Please check /etc/resolv.conf and ensure DNS servers are configured"
+            echo "[prepare] Test manually: ssh ${SSH_USER}@${node_ip} 'getent hosts www.google.com'"
+            exit 1
+        fi
+    fi
+done
+echo ""
+
 # Function to prepare a node
 prepare_node() {
     local node_ip=$1
