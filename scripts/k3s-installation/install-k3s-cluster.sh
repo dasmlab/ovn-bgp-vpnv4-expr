@@ -116,9 +116,9 @@ echo ""
 
 # Step 1: Install on control node
 echo "[install] Step 1/5: Installing k3s on control node..."
-# Use bash with set -u disabled for BASH_SOURCE to avoid unbound variable error when piping
+# Use bash with +u to disable unbound variable checking
 # Capture both stdout and stderr, and ensure errors are visible
-if ! ssh ${SSH_OPTS} "${SSH_USER}@${CONTROL_NODE}" "bash" <<'EOF' 2>&1; then
+if ! ssh ${SSH_OPTS} "${SSH_USER}@${CONTROL_NODE}" "bash +u" <<'EOF' 2>&1; then
 set -eo pipefail
 # Install k3s on control node
 echo "[k3s-control] Installing k3s on control node..."
@@ -192,15 +192,13 @@ echo ""
 # Step 3: Install on worker nodes
 echo "[install] Step 3/5: Installing k3s on worker nodes..."
 echo "[install] Installing on ${WORKER1_HOST}..."
-if ! ssh ${SSH_OPTS} "${SSH_USER}@${WORKER1_NODE}" "bash" <<EOF 2>&1; then
-# Disable unbound variable checking temporarily to initialize variables
-set +u
+if ! ssh ${SSH_OPTS} "${SSH_USER}@${WORKER1_NODE}" "bash +u" <<EOF 2>&1; then
 # Initialize variables first
 TOKEN="${JOIN_TOKEN}"
 CONTROL_IP="${CONTROL_NODE}"
 TIMEOUT=120
 ELAPSED=0
-# Re-enable error checking (but not unbound variable checking)
+
 set -eo pipefail
 
 echo "[k3s-worker] Installing k3s worker node..."
@@ -260,15 +258,13 @@ EOF
 fi
 
 echo "[install] Installing on ${WORKER2_HOST}..."
-if ! ssh ${SSH_OPTS} "${SSH_USER}@${WORKER2_NODE}" "bash" <<EOF 2>&1; then
-# Disable unbound variable checking temporarily to initialize variables
-set +u
+if ! ssh ${SSH_OPTS} "${SSH_USER}@${WORKER2_NODE}" "bash +u" <<EOF 2>&1; then
 # Initialize variables first
 TOKEN="${JOIN_TOKEN}"
 CONTROL_IP="${CONTROL_NODE}"
 TIMEOUT=120
 ELAPSED=0
-# Re-enable error checking (but not unbound variable checking)
+
 set -eo pipefail
 
 echo "[k3s-worker] Installing k3s worker node..."
@@ -362,7 +358,7 @@ if [ "$SKIP_MPLS" = false ]; then
     echo "[install] Step 4/5: Loading MPLS modules on all nodes..."
     for node in "${CONTROL_NODE}" "${WORKER1_NODE}" "${WORKER2_NODE}"; do
         echo "[install] Loading MPLS modules on ${node}..."
-        ssh ${SSH_OPTS} "${SSH_USER}@${node}" "bash" <<'EOF' || {
+        ssh ${SSH_OPTS} "${SSH_USER}@${node}" "bash +u" <<'EOF' || {
 set -eo pipefail
 echo "[mpls-modules] Loading MPLS kernel modules..."
 
