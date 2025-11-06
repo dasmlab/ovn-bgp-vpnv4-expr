@@ -272,6 +272,23 @@ if command -v k3s >/dev/null 2>&1 || sudo command -v k3s >/dev/null 2>&1; then
     fi
 fi
 
+# Clean up any leftover k3s processes that might be holding ports
+echo "[k3s-worker] Checking for leftover k3s processes..."
+if pgrep -f k3s >/dev/null 2>&1; then
+    echo "[k3s-worker] Found running k3s processes, stopping them..."
+    sudo pkill -9 -f k3s || true
+    sleep 2
+fi
+
+# Check if port 6444 is in use (k3s agent load balancer port)
+if sudo lsof -i :6444 >/dev/null 2>&1 || sudo netstat -tuln 2>/dev/null | grep -q ":6444"; then
+    echo "[k3s-worker] WARNING: Port 6444 is in use, checking what's using it..."
+    sudo lsof -i :6444 2>/dev/null || sudo netstat -tuln | grep :6444 || true
+    echo "[k3s-worker] Killing processes using port 6444..."
+    sudo fuser -k 6444/tcp 2>/dev/null || sudo pkill -9 -f "6444" || true
+    sleep 2
+fi
+
 # Verify connectivity to control node
 echo "[k3s-worker] Verifying connectivity to control node..."
 if ! ping -c 1 -W 2 "\${CONTROL_IP}" >/dev/null 2>&1; then
@@ -431,6 +448,23 @@ if command -v k3s >/dev/null 2>&1 || sudo command -v k3s >/dev/null 2>&1; then
         echo "[k3s-worker] k3s binary exists but no agent service found"
         echo "[k3s-worker] Will install as worker..."
     fi
+fi
+
+# Clean up any leftover k3s processes that might be holding ports
+echo "[k3s-worker] Checking for leftover k3s processes..."
+if pgrep -f k3s >/dev/null 2>&1; then
+    echo "[k3s-worker] Found running k3s processes, stopping them..."
+    sudo pkill -9 -f k3s || true
+    sleep 2
+fi
+
+# Check if port 6444 is in use (k3s agent load balancer port)
+if sudo lsof -i :6444 >/dev/null 2>&1 || sudo netstat -tuln 2>/dev/null | grep -q ":6444"; then
+    echo "[k3s-worker] WARNING: Port 6444 is in use, checking what's using it..."
+    sudo lsof -i :6444 2>/dev/null || sudo netstat -tuln | grep :6444 || true
+    echo "[k3s-worker] Killing processes using port 6444..."
+    sudo fuser -k 6444/tcp 2>/dev/null || sudo pkill -9 -f "6444" || true
+    sleep 2
 fi
 
 # Verify connectivity to control node
