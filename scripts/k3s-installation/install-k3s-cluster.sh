@@ -96,7 +96,8 @@ echo ""
 # Step 1: Install on control node
 echo "[install] Step 1/5: Installing k3s on control node..."
 # Use bash with set -u disabled for BASH_SOURCE to avoid unbound variable error when piping
-ssh ${SSH_OPTS} "${SSH_USER}@${CONTROL_NODE}" "bash" <<'EOF'
+# Capture both stdout and stderr, and ensure errors are visible
+if ! ssh ${SSH_OPTS} "${SSH_USER}@${CONTROL_NODE}" "bash" <<'EOF' 2>&1; then
 set -eo pipefail
 # Install k3s on control node
 echo "[k3s-control] Installing k3s on control node..."
@@ -110,7 +111,13 @@ fi
 
 # Install k3s (requires root/sudo)
 echo "[k3s-control] Downloading and installing k3s..."
-curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--disable traefik --disable servicelb" sudo sh -
+echo "[k3s-control] Running: curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC=\"--disable traefik --disable servicelb\" sudo sh -"
+if ! curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--disable traefik --disable servicelb" sudo sh -; then
+    echo "[k3s-control] ERROR: k3s installation failed"
+    echo "[k3s-control] Checking for error logs..."
+    sudo journalctl -u k3s --no-pager -n 20 2>/dev/null || true
+    exit 1
+fi
 
 # Wait for k3s to be ready
 echo "[k3s-control] Waiting for k3s to be ready..."
@@ -119,6 +126,10 @@ elapsed=0
 while ! sudo k3s kubectl get nodes >/dev/null 2>&1; do
     if [ $elapsed -ge $timeout ]; then
         echo "[k3s-control] ERROR: k3s did not start within ${timeout}s"
+        echo "[k3s-control] Checking k3s service status..."
+        sudo systemctl status k3s --no-pager -l || true
+        echo "[k3s-control] Recent logs:"
+        sudo journalctl -u k3s --no-pager -n 30 2>/dev/null || true
         exit 1
     fi
     sleep 2
@@ -146,6 +157,10 @@ echo "  sudo cat /etc/rancher/k3s/k3s.yaml"
 echo "  # Update server address to: https://10.20.1.100:6443"
 echo "  # Save as ~/.kube/config"
 EOF
+    echo "[install] ERROR: Failed to install k3s on control node"
+    echo "[install] Check the output above for details"
+    exit 1
+fi
 
 # Get join token
 echo "[install] Step 2/5: Getting join token..."
@@ -156,7 +171,7 @@ echo ""
 # Step 3: Install on worker nodes
 echo "[install] Step 3/5: Installing k3s on worker nodes..."
 echo "[install] Installing on ${WORKER1_HOST}..."
-ssh ${SSH_OPTS} "${SSH_USER}@${WORKER1_NODE}" "bash" <<EOF
+if ! ssh ${SSH_OPTS} "${SSH_USER}@${WORKER1_NODE}" "bash" <<EOF 2>&1; then
 set -eo pipefail
 TOKEN="${JOIN_TOKEN}"
 CONTROL_IP="${CONTROL_NODE}"
@@ -180,7 +195,11 @@ fi
 
 # Install k3s worker (requires root/sudo)
 echo "[k3s-worker] Downloading and installing k3s worker..."
-curl -sfL https://get.k3s.io | K3S_URL="https://\${CONTROL_IP}:6443" K3S_TOKEN="\${TOKEN}" sudo sh -
+if ! curl -sfL https://get.k3s.io | K3S_URL="https://\${CONTROL_IP}:6443" K3S_TOKEN="\${TOKEN}" sudo sh -; then
+    echo "[k3s-worker] ERROR: k3s worker installation failed"
+    sudo journalctl -u k3s-agent --no-pager -n 20 2>/dev/null || true
+    exit 1
+fi
 
 # Wait for k3s to be ready
 echo "[k3s-worker] Waiting for k3s agent to start..."
@@ -194,12 +213,16 @@ if systemctl is-active --quiet k3s-agent; then
 else
     echo "[k3s-worker] ERROR: k3s agent did not start"
     sudo systemctl status k3s-agent --no-pager -l
+    sudo journalctl -u k3s-agent --no-pager -n 30 2>/dev/null || true
     exit 1
 fi
 EOF
+    echo "[install] ERROR: Failed to install k3s on ${WORKER1_HOST}"
+    exit 1
+fi
 
 echo "[install] Installing on ${WORKER2_HOST}..."
-ssh ${SSH_OPTS} "${SSH_USER}@${WORKER2_NODE}" "bash" <<EOF
+if ! ssh ${SSH_OPTS} "${SSH_USER}@${WORKER2_NODE}" "bash" <<EOF 2>&1; then
 set -eo pipefail
 TOKEN="${JOIN_TOKEN}"
 CONTROL_IP="${CONTROL_NODE}"
@@ -223,7 +246,11 @@ fi
 
 # Install k3s worker (requires root/sudo)
 echo "[k3s-worker] Downloading and installing k3s worker..."
-curl -sfL https://get.k3s.io | K3S_URL="https://\${CONTROL_IP}:6443" K3S_TOKEN="\${TOKEN}" sudo sh -
+if ! curl -sfL https://get.k3s.io | K3S_URL="https://\${CONTROL_IP}:6443" K3S_TOKEN="\${TOKEN}" sudo sh -; then
+    echo "[k3s-worker] ERROR: k3s worker installation failed"
+    sudo journalctl -u k3s-agent --no-pager -n 20 2>/dev/null || true
+    exit 1
+fi
 
 # Wait for k3s to be ready
 echo "[k3s-worker] Waiting for k3s agent to start..."
@@ -237,9 +264,13 @@ if systemctl is-active --quiet k3s-agent; then
 else
     echo "[k3s-worker] ERROR: k3s agent did not start"
     sudo systemctl status k3s-agent --no-pager -l
+    sudo journalctl -u k3s-agent --no-pager -n 30 2>/dev/null || true
     exit 1
 fi
 EOF
+    echo "[install] ERROR: Failed to install k3s on ${WORKER2_HOST}"
+    exit 1
+fi
 
 # Wait for workers to join
 echo "[install] Waiting for workers to join cluster..."
