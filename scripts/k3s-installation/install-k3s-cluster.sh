@@ -285,9 +285,16 @@ if systemctl is-active --quiet k3s-agent 2>/dev/null; then
     sudo systemctl stop k3s-agent 2>/dev/null || true
 fi
 
-# Kill any running k3s processes
+# Use k3s-killall script if available (proper cleanup)
+if [ -f /usr/local/bin/k3s-killall.sh ]; then
+    echo "[k3s-worker] Running k3s-killall.sh for proper cleanup..."
+    sudo /usr/local/bin/k3s-killall.sh 2>/dev/null || true
+    sleep 2
+fi
+
+# Kill any remaining k3s processes
 if pgrep -f k3s >/dev/null 2>&1; then
-    echo "[k3s-worker] Found running k3s processes, stopping them..."
+    echo "[k3s-worker] Found remaining k3s processes, killing them..."
     sudo pkill -9 -f k3s || true
     sleep 2
 fi
@@ -475,9 +482,16 @@ if systemctl is-active --quiet k3s-agent 2>/dev/null; then
     sudo systemctl stop k3s-agent 2>/dev/null || true
 fi
 
-# Kill any running k3s processes
+# Use k3s-killall script if available (proper cleanup)
+if [ -f /usr/local/bin/k3s-killall.sh ]; then
+    echo "[k3s-worker] Running k3s-killall.sh for proper cleanup..."
+    sudo /usr/local/bin/k3s-killall.sh 2>/dev/null || true
+    sleep 2
+fi
+
+# Kill any remaining k3s processes
 if pgrep -f k3s >/dev/null 2>&1; then
-    echo "[k3s-worker] Found running k3s processes, stopping them..."
+    echo "[k3s-worker] Found remaining k3s processes, killing them..."
     sudo pkill -9 -f k3s || true
     sleep 2
 fi
