@@ -319,7 +319,7 @@ echo "[k3s-worker] Downloading and installing k3s worker..."
 echo "[k3s-worker] Connecting to: https://\${CONTROL_ENDPOINT}:6443"
 # Ensure we're installing as agent (worker) by explicitly setting K3S_URL
 # This tells the installer to create k3s-agent.service, not k3s.service
-if ! curl -sfL https://get.k3s.io | K3S_URL="https://\${CONTROL_ENDPOINT}:6443" K3S_TOKEN="\${TOKEN}" INSTALL_K3S_EXEC="agent" sudo sh -; then
+if ! curl -sfL https://get.k3s.io | K3S_URL="https://\${CONTROL_ENDPOINT}:6443" K3S_TOKEN="\${TOKEN}" sudo sh -s - agent; then
     echo "[k3s-worker] ERROR: k3s worker installation failed"
     sudo journalctl -u k3s-agent --no-pager -n 20 2>/dev/null || true
     exit 1
@@ -478,7 +478,7 @@ echo "[k3s-worker] Downloading and installing k3s worker..."
 echo "[k3s-worker] Connecting to: https://\${CONTROL_ENDPOINT}:6443"
 # Ensure we're installing as agent (worker) by explicitly setting K3S_URL
 # This tells the installer to create k3s-agent.service, not k3s.service
-if ! curl -sfL https://get.k3s.io | K3S_URL="https://\${CONTROL_ENDPOINT}:6443" K3S_TOKEN="\${TOKEN}" INSTALL_K3S_EXEC="agent" sudo sh -; then
+if ! curl -sfL https://get.k3s.io | K3S_URL="https://\${CONTROL_ENDPOINT}:6443" K3S_TOKEN="\${TOKEN}" sudo sh -s - agent; then
     echo "[k3s-worker] ERROR: k3s worker installation failed"
     sudo journalctl -u k3s-agent --no-pager -n 20 2>/dev/null || true
     exit 1
