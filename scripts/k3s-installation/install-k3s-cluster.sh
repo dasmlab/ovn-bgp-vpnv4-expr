@@ -14,7 +14,7 @@
 # - SSH_USER: SSH user (default: current user, or set via --user)
 # - SSH_OPTS: Additional SSH options
 
-set -euo pipefail
+set -eo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 
