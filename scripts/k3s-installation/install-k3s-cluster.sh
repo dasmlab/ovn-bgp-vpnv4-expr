@@ -193,12 +193,14 @@ echo ""
 echo "[install] Step 3/5: Installing k3s on worker nodes..."
 echo "[install] Installing on ${WORKER1_HOST}..."
 if ! ssh ${SSH_OPTS} "${SSH_USER}@${WORKER1_NODE}" "bash" <<EOF 2>&1; then
-# Initialize variables first, before any set commands
+# Disable unbound variable checking temporarily to initialize variables
+set +u
+# Initialize variables first
 TOKEN="${JOIN_TOKEN}"
 CONTROL_IP="${CONTROL_NODE}"
 TIMEOUT=120
 ELAPSED=0
-
+# Re-enable error checking (but not unbound variable checking)
 set -eo pipefail
 
 echo "[k3s-worker] Installing k3s worker node..."
@@ -259,12 +261,14 @@ fi
 
 echo "[install] Installing on ${WORKER2_HOST}..."
 if ! ssh ${SSH_OPTS} "${SSH_USER}@${WORKER2_NODE}" "bash" <<EOF 2>&1; then
-# Initialize variables first, before any set commands
+# Disable unbound variable checking temporarily to initialize variables
+set +u
+# Initialize variables first
 TOKEN="${JOIN_TOKEN}"
 CONTROL_IP="${CONTROL_NODE}"
 TIMEOUT=120
 ELAPSED=0
-
+# Re-enable error checking (but not unbound variable checking)
 set -eo pipefail
 
 echo "[k3s-worker] Installing k3s worker node..."
