@@ -1,5 +1,6 @@
 externals/ovn-kubernetes
 externals/ovn-bgp-agent
+artifacts/
 __pycache__/
 *.pyc
 .venv/
