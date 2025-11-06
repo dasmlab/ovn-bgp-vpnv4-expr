@@ -205,9 +205,21 @@ echo "[k3s-worker] Control node: \${CONTROL_IP}"
 
 # Check if already installed
 if command -v k3s >/dev/null 2>&1 || sudo command -v k3s >/dev/null 2>&1; then
-    echo "[k3s-worker] k3s is already installed"
-    # Check if agent is running and can reach control node
-    if systemctl is-active --quiet k3s-agent 2>/dev/null; then
+    echo "[k3s-worker] k3s binary found"
+    
+    # Check if this is a control node installation (wrong for workers)
+    if systemctl list-units --type=service --state=active 2>/dev/null | grep -q "k3s.service"; then
+        echo "[k3s-worker] ERROR: This node has k3s.service (control node) installed, not k3s-agent"
+        echo "[k3s-worker] This node should be a worker, not a control node"
+        echo "[k3s-worker] Uninstalling control node installation..."
+        sudo /usr/local/bin/k3s-uninstall.sh 2>/dev/null || {
+            echo "[k3s-worker] Manual cleanup may be needed"
+            sudo systemctl stop k3s 2>/dev/null || true
+            sudo systemctl disable k3s 2>/dev/null || true
+        }
+        echo "[k3s-worker] Control node installation removed, will install as worker..."
+    # Check if agent is running
+    elif systemctl is-active --quiet k3s-agent 2>/dev/null; then
         echo "[k3s-worker] k3s-agent is running"
         # Try to verify it's connected to the cluster
         if sudo k3s kubectl get nodes 2>/dev/null | grep -q "$(hostname)"; then
@@ -217,9 +229,12 @@ if command -v k3s >/dev/null 2>&1 || sudo command -v k3s >/dev/null 2>&1; then
             echo "[k3s-worker] WARNING: k3s-agent running but node not in cluster"
             echo "[k3s-worker] Will attempt to rejoin..."
         fi
-    else
-        echo "[k3s-worker] k3s installed but agent not running"
+    elif systemctl list-units --type=service 2>/dev/null | grep -q "k3s-agent.service"; then
+        echo "[k3s-worker] k3s-agent service exists but not running"
         echo "[k3s-worker] Will attempt to start/join..."
+    else
+        echo "[k3s-worker] k3s binary exists but no agent service found"
+        echo "[k3s-worker] Will install as worker..."
     fi
 fi
 
@@ -319,9 +334,21 @@ echo "[k3s-worker] Control node: \${CONTROL_IP}"
 
 # Check if already installed
 if command -v k3s >/dev/null 2>&1 || sudo command -v k3s >/dev/null 2>&1; then
-    echo "[k3s-worker] k3s is already installed"
-    # Check if agent is running and can reach control node
-    if systemctl is-active --quiet k3s-agent 2>/dev/null; then
+    echo "[k3s-worker] k3s binary found"
+    
+    # Check if this is a control node installation (wrong for workers)
+    if systemctl list-units --type=service --state=active 2>/dev/null | grep -q "k3s.service"; then
+        echo "[k3s-worker] ERROR: This node has k3s.service (control node) installed, not k3s-agent"
+        echo "[k3s-worker] This node should be a worker, not a control node"
+        echo "[k3s-worker] Uninstalling control node installation..."
+        sudo /usr/local/bin/k3s-uninstall.sh 2>/dev/null || {
+            echo "[k3s-worker] Manual cleanup may be needed"
+            sudo systemctl stop k3s 2>/dev/null || true
+            sudo systemctl disable k3s 2>/dev/null || true
+        }
+        echo "[k3s-worker] Control node installation removed, will install as worker..."
+    # Check if agent is running
+    elif systemctl is-active --quiet k3s-agent 2>/dev/null; then
         echo "[k3s-worker] k3s-agent is running"
         # Try to verify it's connected to the cluster
         if sudo k3s kubectl get nodes 2>/dev/null | grep -q "$(hostname)"; then
@@ -331,9 +358,12 @@ if command -v k3s >/dev/null 2>&1 || sudo command -v k3s >/dev/null 2>&1; then
             echo "[k3s-worker] WARNING: k3s-agent running but node not in cluster"
             echo "[k3s-worker] Will attempt to rejoin..."
         fi
-    else
-        echo "[k3s-worker] k3s installed but agent not running"
+    elif systemctl list-units --type=service 2>/dev/null | grep -q "k3s-agent.service"; then
+        echo "[k3s-worker] k3s-agent service exists but not running"
         echo "[k3s-worker] Will attempt to start/join..."
+    else
+        echo "[k3s-worker] k3s binary exists but no agent service found"
+        echo "[k3s-worker] Will install as worker..."
     fi
 fi
 
