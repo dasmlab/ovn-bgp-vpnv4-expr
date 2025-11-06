@@ -6,6 +6,8 @@
 
 set -euo pipefail
 
+# When piped via SSH, BASH_SOURCE[0] may be unbound - that's OK, we don't use it
+
 if [ $# -lt 2 ]; then
     echo "Usage: $0 <TOKEN> <CONTROL_IP>"
     echo "Example: $0 K10abc...xyz 10.20.1.100"

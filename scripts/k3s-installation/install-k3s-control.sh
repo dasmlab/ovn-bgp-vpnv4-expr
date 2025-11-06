@@ -5,7 +5,10 @@
 
 set -euo pipefail
 
-SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+# SCRIPT_DIR is optional (not used in this script, but defined for consistency)
+# When piped via SSH, BASH_SOURCE[0] may be unbound
+SCRIPT_DIR="${BASH_SOURCE[0]:-}"
+SCRIPT_DIR="${SCRIPT_DIR:+$(cd -- "$(dirname -- "${SCRIPT_DIR}")" && pwd)}"
 
 echo "[k3s-control] Installing k3s on control node..."
 

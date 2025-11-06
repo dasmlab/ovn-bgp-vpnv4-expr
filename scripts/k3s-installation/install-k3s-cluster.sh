@@ -95,7 +95,57 @@ echo ""
 
 # Step 1: Install on control node
 echo "[install] Step 1/5: Installing k3s on control node..."
-ssh ${SSH_OPTS} "${SSH_USER}@${CONTROL_NODE}" "bash -s" < "${SCRIPT_DIR}/install-k3s-control.sh"
+# Use bash with set -u disabled for BASH_SOURCE to avoid unbound variable error when piping
+ssh ${SSH_OPTS} "${SSH_USER}@${CONTROL_NODE}" "bash" <<'EOF'
+set -eo pipefail
+# Install k3s on control node
+echo "[k3s-control] Installing k3s on control node..."
+
+# Check if already installed
+if command -v k3s >/dev/null 2>&1 || sudo command -v k3s >/dev/null 2>&1; then
+    echo "[k3s-control] k3s is already installed"
+    sudo k3s kubectl get nodes
+    exit 0
+fi
+
+# Install k3s (requires root/sudo)
+echo "[k3s-control] Downloading and installing k3s..."
+curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--disable traefik --disable servicelb" sudo sh -
+
+# Wait for k3s to be ready
+echo "[k3s-control] Waiting for k3s to be ready..."
+timeout=60
+elapsed=0
+while ! sudo k3s kubectl get nodes >/dev/null 2>&1; do
+    if [ $elapsed -ge $timeout ]; then
+        echo "[k3s-control] ERROR: k3s did not start within ${timeout}s"
+        exit 1
+    fi
+    sleep 2
+    elapsed=$((elapsed + 2))
+done
+
+# Get node token
+TOKEN=$(sudo cat /var/lib/rancher/k3s/server/node-token)
+echo "[k3s-control] k3s installed successfully!"
+echo "[k3s-control] Node token: ${TOKEN}"
+echo ""
+echo "[k3s-control] Save this token for worker node installation"
+echo "[k3s-control] To get it again later: sudo cat /var/lib/rancher/k3s/server/node-token"
+
+# Show nodes
+echo ""
+echo "[k3s-control] Cluster status:"
+sudo k3s kubectl get nodes
+
+# Show kubeconfig location
+echo ""
+echo "[k3s-control] Kubeconfig location: /etc/rancher/k3s/k3s.yaml"
+echo "[k3s-control] To use from local machine:"
+echo "  sudo cat /etc/rancher/k3s/k3s.yaml"
+echo "  # Update server address to: https://10.20.1.100:6443"
+echo "  # Save as ~/.kube/config"
+EOF
 
 # Get join token
 echo "[install] Step 2/5: Getting join token..."
@@ -106,10 +156,90 @@ echo ""
 # Step 3: Install on worker nodes
 echo "[install] Step 3/5: Installing k3s on worker nodes..."
 echo "[install] Installing on ${WORKER1_HOST}..."
-ssh ${SSH_OPTS} "${SSH_USER}@${WORKER1_NODE}" "bash -s" < "${SCRIPT_DIR}/install-k3s-worker.sh" -- "${JOIN_TOKEN}" "${CONTROL_NODE}"
+ssh ${SSH_OPTS} "${SSH_USER}@${WORKER1_NODE}" "bash" <<EOF
+set -eo pipefail
+TOKEN="${JOIN_TOKEN}"
+CONTROL_IP="${CONTROL_NODE}"
+
+echo "[k3s-worker] Installing k3s worker node..."
+echo "[k3s-worker] Control node: \${CONTROL_IP}"
+
+# Check if already installed
+if command -v k3s >/dev/null 2>&1 || sudo command -v k3s >/dev/null 2>&1; then
+    echo "[k3s-worker] k3s is already installed"
+    sudo k3s kubectl get nodes 2>/dev/null || echo "[k3s-worker] Note: kubectl not available on worker nodes"
+    exit 0
+fi
+
+# Verify connectivity to control node
+echo "[k3s-worker] Verifying connectivity to control node..."
+if ! ping -c 1 -W 2 "\${CONTROL_IP}" >/dev/null 2>&1; then
+    echo "[k3s-worker] ERROR: Cannot reach control node at \${CONTROL_IP}"
+    exit 1
+fi
+
+# Install k3s worker (requires root/sudo)
+echo "[k3s-worker] Downloading and installing k3s worker..."
+curl -sfL https://get.k3s.io | K3S_URL="https://\${CONTROL_IP}:6443" K3S_TOKEN="\${TOKEN}" sudo sh -
+
+# Wait for k3s to be ready
+echo "[k3s-worker] Waiting for k3s agent to start..."
+sleep 5
+
+# Verify installation
+if systemctl is-active --quiet k3s-agent; then
+    echo "[k3s-worker] k3s worker installed successfully!"
+    echo "[k3s-worker] Agent status:"
+    sudo systemctl status k3s-agent --no-pager -l
+else
+    echo "[k3s-worker] ERROR: k3s agent did not start"
+    sudo systemctl status k3s-agent --no-pager -l
+    exit 1
+fi
+EOF
 
 echo "[install] Installing on ${WORKER2_HOST}..."
-ssh ${SSH_OPTS} "${SSH_USER}@${WORKER2_NODE}" "bash -s" < "${SCRIPT_DIR}/install-k3s-worker.sh" -- "${JOIN_TOKEN}" "${CONTROL_NODE}"
+ssh ${SSH_OPTS} "${SSH_USER}@${WORKER2_NODE}" "bash" <<EOF
+set -eo pipefail
+TOKEN="${JOIN_TOKEN}"
+CONTROL_IP="${CONTROL_NODE}"
+
+echo "[k3s-worker] Installing k3s worker node..."
+echo "[k3s-worker] Control node: \${CONTROL_IP}"
+
+# Check if already installed
+if command -v k3s >/dev/null 2>&1 || sudo command -v k3s >/dev/null 2>&1; then
+    echo "[k3s-worker] k3s is already installed"
+    sudo k3s kubectl get nodes 2>/dev/null || echo "[k3s-worker] Note: kubectl not available on worker nodes"
+    exit 0
+fi
+
+# Verify connectivity to control node
+echo "[k3s-worker] Verifying connectivity to control node..."
+if ! ping -c 1 -W 2 "\${CONTROL_IP}" >/dev/null 2>&1; then
+    echo "[k3s-worker] ERROR: Cannot reach control node at \${CONTROL_IP}"
+    exit 1
+fi
+
+# Install k3s worker (requires root/sudo)
+echo "[k3s-worker] Downloading and installing k3s worker..."
+curl -sfL https://get.k3s.io | K3S_URL="https://\${CONTROL_IP}:6443" K3S_TOKEN="\${TOKEN}" sudo sh -
+
+# Wait for k3s to be ready
+echo "[k3s-worker] Waiting for k3s agent to start..."
+sleep 5
+
+# Verify installation
+if systemctl is-active --quiet k3s-agent; then
+    echo "[k3s-worker] k3s worker installed successfully!"
+    echo "[k3s-worker] Agent status:"
+    sudo systemctl status k3s-agent --no-pager -l
+else
+    echo "[k3s-worker] ERROR: k3s agent did not start"
+    sudo systemctl status k3s-agent --no-pager -l
+    exit 1
+fi
+EOF
 
 # Wait for workers to join
 echo "[install] Waiting for workers to join cluster..."
@@ -120,7 +250,70 @@ if [ "$SKIP_MPLS" = false ]; then
     echo "[install] Step 4/5: Loading MPLS modules on all nodes..."
     for node in "${CONTROL_NODE}" "${WORKER1_NODE}" "${WORKER2_NODE}"; do
         echo "[install] Loading MPLS modules on ${node}..."
-        ssh ${SSH_OPTS} "${SSH_USER}@${node}" "bash -s" < "${SCRIPT_DIR}/load-mpls-modules.sh" || {
+        ssh ${SSH_OPTS} "${SSH_USER}@${node}" "bash" <<'EOF' || {
+set -eo pipefail
+echo "[mpls-modules] Loading MPLS kernel modules..."
+
+# Check kernel version
+KERNEL_VERSION=$(uname -r | cut -d. -f1,2)
+REQUIRED_VERSION="5.15"
+
+if [ "$(printf '%s\n' "$REQUIRED_VERSION" "$KERNEL_VERSION" | sort -V | head -n1)" != "$REQUIRED_VERSION" ]; then
+    echo "[mpls-modules] WARNING: Kernel version ${KERNEL_VERSION} may not support MPLS modules"
+    echo "[mpls-modules] Recommended: kernel 5.15+"
+fi
+
+# Check if modules exist (requires root to read /lib/modules)
+if ! sudo find /lib/modules/$(uname -r) -name "mpls_router.ko" >/dev/null 2>&1; then
+    echo "[mpls-modules] ERROR: mpls_router module not found"
+    echo "[mpls-modules] Kernel may not have MPLS support compiled in"
+    exit 1
+fi
+
+# Load modules (requires root)
+echo "[mpls-modules] Loading mpls_router..."
+sudo modprobe mpls_router || {
+    echo "[mpls-modules] ERROR: Failed to load mpls_router"
+    exit 1
+}
+
+echo "[mpls-modules] Loading mpls_iptunnel..."
+sudo modprobe mpls_iptunnel || {
+    echo "[mpls-modules] ERROR: Failed to load mpls_iptunnel"
+    exit 1
+}
+
+# Verify modules are loaded
+if lsmod | grep -q "^mpls_router"; then
+    echo "[mpls-modules] ✓ mpls_router loaded"
+else
+    echo "[mpls-modules] ERROR: mpls_router not loaded"
+    exit 1
+fi
+
+if lsmod | grep -q "^mpls_iptunnel"; then
+    echo "[mpls-modules] ✓ mpls_iptunnel loaded"
+else
+    echo "[mpls-modules] ERROR: mpls_iptunnel not loaded"
+    exit 1
+fi
+
+# Make persistent
+MODULES_FILE="/etc/modules-load.d/mpls.conf"
+if [ ! -f "$MODULES_FILE" ] || ! grep -q "mpls_router" "$MODULES_FILE"; then
+    echo "[mpls-modules] Making modules persistent..."
+    cat <<MODULES_EOF | sudo tee "$MODULES_FILE"
+mpls_router
+mpls_iptunnel
+MODULES_EOF
+    echo "[mpls-modules] ✓ Modules will load on boot"
+else
+    echo "[mpls-modules] ✓ Modules already configured for boot"
+fi
+
+echo "[mpls-modules] MPLS modules loaded successfully!"
+lsmod | grep mpls
+EOF
             echo "[install] WARNING: Failed to load MPLS modules on ${node}"
         }
     done

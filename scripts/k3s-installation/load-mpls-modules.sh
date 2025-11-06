@@ -5,6 +5,8 @@
 
 set -euo pipefail
 
+# When piped via SSH, BASH_SOURCE[0] may be unbound - that's OK, we don't use it
+
 echo "[mpls-modules] Loading MPLS kernel modules..."
 
 # Check kernel version
