@@ -125,9 +125,30 @@ echo "[k3s-control] Installing k3s on control node..."
 
 # Check if already installed
 if command -v k3s >/dev/null 2>&1 || sudo command -v k3s >/dev/null 2>&1; then
-    echo "[k3s-control] k3s is already installed"
-    sudo k3s kubectl get nodes
-    exit 0
+    echo "[k3s-control] k3s binary found"
+    
+    # Verify this is a control node installation (k3s.service), not agent
+    if systemctl is-active --quiet k3s 2>/dev/null; then
+        echo "[k3s-control] k3s.service is running (control node)"
+        sudo k3s kubectl get nodes
+        exit 0
+    elif systemctl list-units --type=service 2>/dev/null | grep -q "k3s.service"; then
+        echo "[k3s-control] k3s.service exists but not running"
+        echo "[k3s-control] Will attempt to start..."
+    elif systemctl list-units --type=service 2>/dev/null | grep -q "k3s-agent.service"; then
+        echo "[k3s-control] ERROR: This node has k3s-agent.service (worker) installed, not k3s.service"
+        echo "[k3s-control] This node should be a control node, not a worker"
+        echo "[k3s-control] Uninstalling worker installation..."
+        sudo /usr/local/bin/k3s-agent-uninstall.sh 2>/dev/null || {
+            echo "[k3s-control] Manual cleanup may be needed"
+            sudo systemctl stop k3s-agent 2>/dev/null || true
+            sudo systemctl disable k3s-agent 2>/dev/null || true
+        }
+        echo "[k3s-control] Worker installation removed, will install as control node..."
+    else
+        echo "[k3s-control] k3s binary exists but no service found"
+        echo "[k3s-control] Will install as control node..."
+    fi
 fi
 
 # Install k3s (requires root/sudo)
