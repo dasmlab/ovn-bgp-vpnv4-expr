@@ -241,11 +241,16 @@ if command -v k3s >/dev/null 2>&1 || sudo command -v k3s >/dev/null 2>&1; then
         if [ -f /usr/local/bin/k3s-uninstall.sh ]; then
             sudo /usr/local/bin/k3s-uninstall.sh 2>/dev/null || true
         fi
-        # Clean up any remaining files
+        # Clean up any remaining files - thorough cleanup
         sudo rm -f /etc/systemd/system/k3s.service
         sudo rm -f /etc/systemd/system/k3s.service.env
+        sudo rm -f /etc/systemd/system/k3s-agent.service
+        sudo rm -f /etc/systemd/system/k3s-agent.service.env
         sudo rm -rf /var/lib/rancher/k3s/server 2>/dev/null || true
+        sudo rm -rf /var/lib/rancher/k3s/agent 2>/dev/null || true
+        sudo rm -f /etc/rancher/k3s/config.yaml 2>/dev/null || true
         sudo systemctl daemon-reload
+        sudo systemctl reset-failed 2>/dev/null || true
         echo "[k3s-worker] Control node installation removed, will install as worker..."
     # Check if agent is running
     elif systemctl is-active --quiet k3s-agent 2>/dev/null; then
@@ -395,11 +400,16 @@ if command -v k3s >/dev/null 2>&1 || sudo command -v k3s >/dev/null 2>&1; then
         if [ -f /usr/local/bin/k3s-uninstall.sh ]; then
             sudo /usr/local/bin/k3s-uninstall.sh 2>/dev/null || true
         fi
-        # Clean up any remaining files
+        # Clean up any remaining files - thorough cleanup
         sudo rm -f /etc/systemd/system/k3s.service
         sudo rm -f /etc/systemd/system/k3s.service.env
+        sudo rm -f /etc/systemd/system/k3s-agent.service
+        sudo rm -f /etc/systemd/system/k3s-agent.service.env
         sudo rm -rf /var/lib/rancher/k3s/server 2>/dev/null || true
+        sudo rm -rf /var/lib/rancher/k3s/agent 2>/dev/null || true
+        sudo rm -f /etc/rancher/k3s/config.yaml 2>/dev/null || true
         sudo systemctl daemon-reload
+        sudo systemctl reset-failed 2>/dev/null || true
         echo "[k3s-worker] Control node installation removed, will install as worker..."
     # Check if agent is running
     elif systemctl is-active --quiet k3s-agent 2>/dev/null; then
